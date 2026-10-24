@@ -1,6 +1,16 @@
 import type { AISettings } from "../ai";
+import type { ReactNode } from "react";
 
-export function SettingsScreen({ settings, onChange }: { settings: AISettings; onChange: (s: AISettings) => void }) {
+export function SettingsScreen({
+  settings,
+  onChange,
+  children,
+}: {
+  settings: AISettings;
+  onChange: (s: AISettings) => void;
+  /** 設定画面の下に足すパネル（バックアップなど） */
+  children?: ReactNode;
+}) {
   return (
     <section className="panel">
       <h2>設定</h2>
@@ -44,6 +54,7 @@ export function SettingsScreen({ settings, onChange }: { settings: AISettings; o
           <span>Claudeにつながらないときは端末内AIで続ける</span>
         </label>
       )}
+      {children}
     </section>
   );
 }

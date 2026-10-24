@@ -44,3 +44,13 @@ export async function saveFeedback(f: Feedback): Promise<void> {
 export async function deleteFeedback(outfitKey: string): Promise<void> {
   await (await db()).delete("feedback", outfitKey);
 }
+
+/** バックアップから戻す。同じIDのものは上書きし、ほかはそのまま残す */
+export async function importAll(garments: Garment[], feedback: Feedback[]): Promise<void> {
+  const tx = (await db()).transaction(["garments", "feedback"], "readwrite");
+  await Promise.all([
+    ...garments.map((g) => tx.objectStore("garments").put(g)),
+    ...feedback.map((f) => tx.objectStore("feedback").put(f)),
+    tx.done,
+  ]);
+}
