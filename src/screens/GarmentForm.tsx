@@ -36,7 +36,8 @@ export function GarmentForm({
 }: {
   ai: ClosetAI;
   initial?: Garment;
-  onSave: (g: Garment) => Promise<void>;
+  /** analysis は自動判定したときだけ入る（判定の記録用） */
+  onSave: (g: Garment, analysis?: { result: GarmentAnalysis; elapsedMs: number }) => Promise<void>;
   onDelete?: () => Promise<void>;
   onCancel: () => void;
 }) {
@@ -49,6 +50,7 @@ export function GarmentForm({
   const [warmth, setWarmth] = useState<Warmth>(initial?.warmth ?? 2);
   const [note, setNote] = useState(initial?.note ?? "");
   const [analysis, setAnalysis] = useState<GarmentAnalysis>();
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [status, setStatus] = useState<{ message: string; progress?: number }>();
   const [error, setError] = useState<string>();
   const [saving, setSaving] = useState(false);
@@ -65,8 +67,10 @@ export function GarmentForm({
     abortRef.current = ac;
     setStatus({ message: "判定の準備中…" });
     try {
+      const started = performance.now();
       const a = await ai.analyzeGarment(file, { signal: ac.signal, onProgress: setStatus });
       if (ac.signal.aborted) return;
+      setElapsedMs(performance.now() - started);
       setAnalysis(a);
       if (a.category) setCategory(a.category);
       if (a.subType) setSubType(a.subType);
@@ -94,7 +98,7 @@ export function GarmentForm({
         formality,
         warmth,
         note: note.trim() || undefined,
-      });
+      }, analysis && { result: analysis, elapsedMs });
     } catch (e) {
       setError(errorMessage(e));
       setSaving(false);

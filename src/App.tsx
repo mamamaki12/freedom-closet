@@ -7,6 +7,7 @@ import { GarmentForm } from "./screens/GarmentForm";
 import { OutfitScreen } from "./screens/OutfitScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
+import { addRecord } from "./storage/analysisLog";
 import * as db from "./storage/db";
 import { loadAISettings, saveAISettings } from "./storage/settings";
 
@@ -64,8 +65,24 @@ export function App() {
             ai={ai}
             initial={editing === "new" ? undefined : editing}
             onCancel={() => setEditing(null)}
-            onSave={async (g) => {
+            onSave={async (g, analysis) => {
               await db.saveGarment(g);
+              if (analysis) {
+                // 記録に失敗しても登録は続ける
+                await addRecord({
+                  id: crypto.randomUUID(),
+                  at: Date.now(),
+                  provider: ai.id,
+                  elapsedMs: analysis.elapsedMs,
+                  predicted: {
+                    category: analysis.result.category,
+                    subType: analysis.result.subType,
+                    color: analysis.result.color,
+                    confidence: analysis.result.confidence,
+                  },
+                  final: { category: g.category, subType: g.subType, color: g.color },
+                }).catch(() => undefined);
+              }
               await reload();
               setEditing(null);
             }}

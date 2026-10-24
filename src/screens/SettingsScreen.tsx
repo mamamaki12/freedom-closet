@@ -1,4 +1,5 @@
 import type { AISettings } from "../ai";
+import { AccuracyPanel } from "./AccuracyPanel";
 
 export function SettingsScreen({ settings, onChange }: { settings: AISettings; onChange: (s: AISettings) => void }) {
   return (
@@ -44,6 +45,7 @@ export function SettingsScreen({ settings, onChange }: { settings: AISettings; o
           <span>Claudeにつながらないときは端末内AIで続ける</span>
         </label>
       )}
+      <AccuracyPanel />
     </section>
   );
 }

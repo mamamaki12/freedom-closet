@@ -366,3 +366,20 @@ button.thumb {
   color: var(--accent);
   font-weight: 600;
 }
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin: 8px 0;
+}
+.table th,
+.table td {
+  border-bottom: 1px solid var(--line);
+  padding: 4px 6px;
+  text-align: right;
+  white-space: nowrap;
+}
+.table th:first-child,
+.table td:first-child {
+  text-align: left;
+}
