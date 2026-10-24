@@ -11,6 +11,7 @@ import {
   type Outfit,
   type Purpose,
 } from "../domain/types";
+import { referenceLinks } from "../shop/reference";
 
 export function OutfitScreen({
   ai,
@@ -132,6 +133,14 @@ export function OutfitScreen({
               <li key={j}>{line}</li>
             ))}
           </ul>
+          <p className="hint refs">
+            似た着こなしの写真：
+            {referenceLinks(o.garmentIds.flatMap((id) => byId.get(id) ?? [])).map((l) => (
+              <a key={l.url} href={l.url} target="_blank" rel="noopener noreferrer">
+                {l.label}
+              </a>
+            ))}
+          </p>
           <div className="actions">
             <button
               className={`btn${ratings.get(o.key) === true ? " primary" : ""}`}

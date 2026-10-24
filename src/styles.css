@@ -366,3 +366,7 @@ button.thumb {
   color: var(--accent);
   font-weight: 600;
 }
+.refs a {
+  color: var(--accent);
+  margin-left: 10px;
+}
