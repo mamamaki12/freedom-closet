@@ -366,3 +366,13 @@ button.thumb {
   color: var(--accent);
   font-weight: 600;
 }
+.weather {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.weather a {
+  color: inherit;
+}

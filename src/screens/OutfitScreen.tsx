@@ -11,6 +11,7 @@ import {
   type Outfit,
   type Purpose,
 } from "../domain/types";
+import { WeatherButton } from "../weather/WeatherButton";
 
 export function OutfitScreen({
   ai,
@@ -77,6 +78,7 @@ export function OutfitScreen({
         )}
       </fieldset>
 
+      <WeatherButton onTemperature={(c) => setTemperature(String(c))} />
       <fieldset className="row wrap">
         <label className="field">
           気温（℃）
