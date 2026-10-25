@@ -105,6 +105,8 @@ export interface OutfitRequest {
   purpose: Purpose;
   /** 「明るめ」「楽な服」など自由記述（主にClaude用。端末内AIは一部のキーワードだけ見る） */
   preference?: string;
+  /** 「ほかの案」用。もう見せた組み合わせ（Outfit.key）は出さない */
+  exclude?: string[];
 }
 
 export interface Outfit {

@@ -31,6 +31,14 @@ describe("suggestOutfitsLocal", () => {
     expect(res.every((o) => o.explanation.length > 0)).toBe(true);
   });
 
+  it("「ほかの案」では、もう見せた組み合わせを出さない", () => {
+    const first = suggestOutfitsLocal(closet, { mustInclude: [], purpose: "everyday", temperatureC: 22 }, []);
+    const shown = first.map((o) => o.key);
+    const next = suggestOutfitsLocal(closet, { mustInclude: [], purpose: "everyday", temperatureC: 22, exclude: shown }, []);
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.some((o) => shown.includes(o.key))).toBe(false);
+  });
+
   it("夏は夏服を上位にする", () => {
     const [first] = suggestOutfitsLocal(closet, { mustInclude: [], purpose: "everyday", temperatureC: 30 }, []);
     expect(first.garmentIds).toContain("t2");

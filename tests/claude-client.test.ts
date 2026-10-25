@@ -26,6 +26,21 @@ describe("sanitizeOutfits", () => {
     );
     expect(res.map((o) => o.title)).toEqual(["OK"]);
   });
+
+  it("もう見せた組み合わせは落とす", () => {
+    const res = sanitizeOutfits(
+      {
+        outfits: [
+          { garmentIds: ["b1", "t1"], title: "見せた", explanation: [] },
+          { garmentIds: ["t2", "b1"], title: "新しい", explanation: [] },
+        ],
+      },
+      closet,
+      [],
+      ["b1+t1"],
+    );
+    expect(res.map((o) => o.title)).toEqual(["新しい"]);
+  });
 });
 
 describe("ClaudeAI", () => {

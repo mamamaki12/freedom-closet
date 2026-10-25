@@ -1,5 +1,5 @@
 // 買い足し提案。買う服の種類・色を決めて、ユニクロ・GUの公式サイトの検索結果へつなぐ。
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { ColorChips, ColorDot, errorMessage, GarmentThumb } from "../components/common";
 import { colorLabel } from "../domain/colors";
@@ -9,65 +9,84 @@ import { searchLinks } from "../shop/links";
 
 export function ShopScreen({ ai, garments, feedback }: { ai: ClosetAI; garments: Garment[]; feedback: Feedback[] }) {
   const [avoidColors, setAvoidColors] = useState<ColorName[]>([]);
-  const [preference, setPreference] = useState("");
-  const [budget, setBudget] = useState("");
+  const [preferenceInput, setPreferenceInput] = useState("");
+  const [budgetInput, setBudgetInput] = useState("");
+  const [extra, setExtra] = useState<{ preference?: string; budgetYen?: number }>({});
   const [result, setResult] = useState<PurchaseSuggestion[]>();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string>();
   const byId = new Map(garments.map((g) => [g.id, g]));
+  const seqRef = useRef(0);
+  const feedbackRef = useRef(feedback);
+  feedbackRef.current = feedback;
+  const closetJson = useMemo(() => JSON.stringify(garments.map(toInfo)), [garments]);
 
-  async function suggest() {
+  // 画面を開いたらすぐ提案する。避けたい色を変えたらすぐ出し直す
+  useEffect(() => {
+    const seq = ++seqRef.current;
     setLoading(true);
     setError(undefined);
-    try {
-      const b = Number(budget);
-      setResult(
-        await ai.suggestPurchases({
-          closet: garments.map(toInfo),
-          request: {
-            avoidColors,
-            preference: preference.trim() || undefined,
-            budgetYen: budget.trim() && Number.isFinite(b) ? Math.round(b) : undefined,
-          },
-          feedback,
-        }),
-      );
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setLoading(false);
-    }
+    ai.suggestPurchases({ closet: JSON.parse(closetJson), request: { avoidColors, ...extra }, feedback: feedbackRef.current })
+      .then((r) => seq === seqRef.current && setResult(r))
+      .catch((e) => seq === seqRef.current && setError(errorMessage(e)))
+      .finally(() => seq === seqRef.current && setLoading(false));
+  }, [ai, closetJson, avoidColors, extra]);
+
+  function applyExtra(e: React.FormEvent) {
+    e.preventDefault();
+    const b = Number(budgetInput);
+    setExtra({
+      preference: preferenceInput.trim() || undefined,
+      budgetYen: budgetInput.trim() && Number.isFinite(b) ? Math.round(b) : undefined,
+    });
   }
+
+  const conditionSummary =
+    [avoidColors.length ? `${avoidColors.map(colorLabel).join("・")}以外` : "", extra.preference ?? "", extra.budgetYen ? `${extra.budgetYen}円まで` : ""]
+      .filter(Boolean)
+      .join("／") || "指定なし";
 
   return (
     <section className="panel">
       <h2>買い足すなら</h2>
-      <p className="hint">手持ちの服と合わせやすく、コーデが増える服を選びます。商品はユニクロ・GUの公式サイトで探せます。</p>
+      <p className="hint">手持ちの服と合わせやすく、コーデが増える服を選びました。商品はユニクロ・GUの公式サイトで探せます。</p>
 
-      <fieldset>
-        <legend>避けたい色</legend>
-        <ColorChips
-          value={avoidColors}
-          onToggle={(c) => setAvoidColors((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]))}
-        />
-      </fieldset>
-      <div className="row wrap">
-        <input
-          className="text"
-          value={preference}
-          placeholder="好み（任意）例：きれいめ、楽な服"
-          onChange={(e) => setPreference(e.target.value)}
-          maxLength={300}
-        />
-        <label className="field">
-          予算（円・任意）
-          <input className="text short" type="number" inputMode="numeric" value={budget} onChange={(e) => setBudget(e.target.value)} />
-        </label>
-      </div>
+      <details className="more">
+        <summary>
+          条件を変える <span className="hint">{conditionSummary}</span>
+        </summary>
+        <div className="more-body">
+          <p className="hint">避けたい色</p>
+          <ColorChips
+            value={avoidColors}
+            onToggle={(c) => setAvoidColors((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]))}
+          />
+          <form className="row wrap" onSubmit={applyExtra}>
+            <input
+              className="text"
+              value={preferenceInput}
+              placeholder="好み（任意）例：きれいめ、楽な服"
+              onChange={(e) => setPreferenceInput(e.target.value)}
+              maxLength={300}
+            />
+            <label className="field">
+              予算（円・任意）
+              <input
+                className="text short"
+                type="number"
+                inputMode="numeric"
+                value={budgetInput}
+                onChange={(e) => setBudgetInput(e.target.value)}
+              />
+            </label>
+            <button className="btn" type="submit">
+              反映
+            </button>
+          </form>
+        </div>
+      </details>
 
-      <button className="btn primary wide" onClick={suggest} disabled={loading}>
-        {loading ? "考え中…" : "おすすめを見る"}
-      </button>
+      {loading && <p className="hint">考え中…</p>}
       {error && <p className="error">{error}</p>}
       {result && result.length === 0 && <p className="empty">今の手持ちで十分そうです。服を登録すると提案が変わります。</p>}
 
