@@ -39,8 +39,11 @@ interface Combo {
   items: GarmentInfo[];
 }
 
-/** 手持ちの服から、着られる組み合わせを全部作る（トップス×ボトムス or ワンピース、＋アウター、＋靴） */
-export function buildCombos(closet: GarmentInfo[], temperatureC?: number): Combo[] {
+/**
+ * 手持ちの服から、着られる組み合わせを全部作る（トップス×ボトムス or ワンピース、＋アウター、＋靴）。
+ * required を渡すと、その服を含む組み合わせだけを作る（買い足し候補の計算を速くするため）。
+ */
+export function buildCombos(closet: GarmentInfo[], temperatureC?: number, required?: GarmentInfo): Combo[] {
   const by = (c: GarmentInfo["category"]) => closet.filter((g) => g.category === c);
   const tops = by("tops");
   const bottoms = by("bottoms");
@@ -49,13 +52,17 @@ export function buildCombos(closet: GarmentInfo[], temperatureC?: number): Combo
   const shoes = by("shoes");
   const { outer } = climateFor(temperatureC);
 
-  const bases: GarmentInfo[][] = [];
-  for (const t of tops) for (const b of bottoms) bases.push([t, b]);
-  for (const o of onepieces) bases.push([o]);
+  const req = required?.category;
+  const only = (c: GarmentInfo["category"], list: GarmentInfo[]) => (req === c ? [required!] : list);
 
-  const outerOptions: (GarmentInfo | null)[] =
+  const bases: GarmentInfo[][] = [];
+  if (req !== "onepiece") for (const t of only("tops", tops)) for (const b of only("bottoms", bottoms)) bases.push([t, b]);
+  if (req !== "tops" && req !== "bottoms") for (const o of only("onepiece", onepieces)) bases.push([o]);
+
+  let outerOptions: (GarmentInfo | null)[] =
     outer === "none" ? [null] : outer === "required" && outers.length > 0 ? outers : [null, ...outers];
-  const shoeOptions: (GarmentInfo | null)[] = shoes.length > 0 ? shoes : [null];
+  if (req === "outer") outerOptions = outer === "none" ? [] : [required!];
+  const shoeOptions: (GarmentInfo | null)[] = req === "shoes" ? [required!] : shoes.length > 0 ? shoes : [null];
 
   const combos: Combo[] = [];
   for (const base of bases)
@@ -196,9 +203,8 @@ export function pickDiverse(scored: ScoredCombo[], n: number): ScoredCombo[] {
     let bestIdx = 0;
     let bestVal = -Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const overlap = remaining[i].items
-        .filter((g) => g.category !== "shoes")
-        .reduce((s, g) => s + (used.get(g.id) ?? 0), 0);
+      // 靴は持っている数が少ないので軽めに数える（それでも3案とも同じ靴にはなりにくくする）
+      const overlap = remaining[i].items.reduce((s, g) => s + (used.get(g.id) ?? 0) * (g.category === "shoes" ? 0.5 : 1), 0);
       const val = remaining[i].score - overlap * 1.2;
       if (val > bestVal) {
         bestVal = val;

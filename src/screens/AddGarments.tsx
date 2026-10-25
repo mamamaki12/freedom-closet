@@ -5,6 +5,7 @@ import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
 import { applyPreset, PRESETS, presetFor, type Preset } from "../domain/presets";
 import { CATEGORIES, CATEGORY_LABELS, type Garment, type GarmentAnalysis } from "../domain/types";
+import { shrinkPhoto } from "../storage/photo";
 import { EMPTY_DRAFT, type Draft } from "./GarmentEditor";
 
 interface Item {
@@ -65,10 +66,10 @@ export function AddGarments({
   const update = (key: string, patch: Partial<Item>) =>
     setItems((cur) => cur.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
-  async function save(it: Item, draft: Draft, analysis?: { result: GarmentAnalysis; elapsedMs: number }) {
-    const garment = toGarment(it.photo, draft);
+  async function save(it: Item, draft: Draft, analysis?: { result: GarmentAnalysis; elapsedMs: number }, photo = it.photo) {
+    const garment = toGarment(photo, draft);
     await onSave(garment, analysis);
-    update(it.key, { state: "saved", garment, draft });
+    update(it.key, { state: "saved", garment, draft, photo });
   }
 
   // 1枚ずつ順番に判定して、種類が分かったらそのまま登録する（端末の負荷を抑えるため1枚ずつ）
@@ -78,14 +79,16 @@ export function AddGarments({
     if (!next) return;
     runningRef.current = true;
     update(next.key, { state: "analyzing" });
-    const started = performance.now();
     const { signal } = abortRef.current;
-    ai.analyzeGarment(next.photo, { signal, onProgress: (p) => update(next.key, { progress: p }) })
-      .then(async (a) => {
+    // 先に写真を縮めておく（保存する容量を減らし、判定も速くなる）
+    shrinkPhoto(next.photo)
+      .then(async (photo) => {
+        const started = performance.now();
+        const a = await ai.analyzeGarment(photo, { signal, onProgress: (p) => update(next.key, { progress: p }) });
         const elapsedMs = performance.now() - started;
         const draft = draftFromAnalysis(a);
-        if (draft) await save(next, draft, { result: a, elapsedMs });
-        else update(next.key, { state: "needsType", analysis: a, elapsedMs, draft: { ...EMPTY_DRAFT, color: a.color } });
+        if (draft) await save(next, draft, { result: a, elapsedMs }, photo);
+        else update(next.key, { state: "needsType", analysis: a, elapsedMs, photo, draft: { ...EMPTY_DRAFT, color: a.color } });
       })
       // 中断されたとき（開発時の再マウントなど）は、もう一度判定しなおす
       .catch((e) => update(next.key, signal.aborted ? { state: "waiting" } : { state: "failed", error: errorMessage(e) }))
@@ -137,10 +140,12 @@ export function AddGarments({
             {busy > 0 && <small>終わるまでこの画面のままにしてください。</small>}
           </div>
 
-          {needs.map((it) => (
+          {/* 種類が分からなかった写真は1枚ずつ聞く（全部並べると画面が長くなるため） */}
+          {needs.slice(0, 1).map((it) => (
             <ChooseType
               key={it.key}
               item={it}
+              rest={needs.length - 1}
               onChoose={(p) =>
                 save(
                   it,
@@ -182,16 +187,30 @@ function AddedThumb({ item, onClick }: { item: Item; onClick?: () => void }) {
 }
 
 /** 種類が分からなかった写真だけ、よくある種類から1回タップで選んでもらう（色は判定済み） */
-function ChooseType({ item, onChoose, onRemove }: { item: Item; onChoose: (p: Preset) => void; onRemove: () => void }) {
+function ChooseType({
+  item,
+  rest,
+  onChoose,
+  onRemove,
+}: {
+  item: Item;
+  /** このあとに残っている枚数 */
+  rest: number;
+  onChoose: (p: Preset) => void;
+  onRemove: () => void;
+}) {
   const url = usePhotoUrl(item.photo);
   return (
     <div className="choose">
       <div className="row">
         {url && <img className="choose-photo" src={url} alt="種類が分からなかった服" />}
         <div className="grow">
-          <p>{item.state === "failed" ? "うまく判定できませんでした。" : "種類だけ分かりませんでした。"}どれですか？</p>
+          <p>
+            {item.state === "failed" ? "うまく判定できませんでした。" : "種類だけ分かりませんでした。"}どれですか？
+            {rest > 0 && <span className="hint">（このあと{rest}枚）</span>}
+          </p>
           <button className="link" onClick={onRemove}>
-            この写真はやめる
+            服ではない・この写真はやめる
           </button>
         </div>
       </div>

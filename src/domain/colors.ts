@@ -118,10 +118,20 @@ export function rgbToLab([r, g, b]: [number, number, number]): [number, number, 
   return [116 * fy - 16, 500 * (fx - fy), 200 * (fy - fz)];
 }
 
-const PALETTE_LAB = (Object.keys(COLORS) as ColorName[]).map((name) => ({
-  name,
-  lab: rgbToLab(hexToRgb(COLORS[name].hex)),
-}));
+/**
+ * 見本の色に加えて、実際の服の写真で出やすい色も見本にする。
+ * （サンプル写真で試したところ、濃いピンクが赤に、暗い赤が黒になりやすかった）
+ */
+const EXTRA_SAMPLES: [ColorName, string][] = [
+  ["pink", "#d63c78"], // 濃いピンク
+  ["red", "#6e1f2b"], // ボルドー（暗い赤）
+  ["blue", "#3e5f8a"], // デニムの青
+];
+
+const PALETTE_LAB = [
+  ...(Object.keys(COLORS) as ColorName[]).map((name) => ({ name, lab: rgbToLab(hexToRgb(COLORS[name].hex)) })),
+  ...EXTRA_SAMPLES.map(([name, hex]) => ({ name, lab: rgbToLab(hexToRgb(hex)) })),
+];
 
 export function nearestColorName(rgb: [number, number, number]): ColorName {
   const lab = rgbToLab(rgb);
@@ -134,5 +144,7 @@ export function nearestColorName(rgb: [number, number, number]): ColorName {
       best = p.name;
     }
   }
+  // 室内で撮ると、ネイビーは暗く写って黒に近くなる。青みがはっきりあればネイビーにする
+  if (best === "black" && lab[2] <= -7) return "navy";
   return best;
 }
