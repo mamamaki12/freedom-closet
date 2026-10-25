@@ -132,7 +132,7 @@ export function AddGarments({
           <div className="status info" role="status">
             {busy > 0
               ? `判定して登録しています…（残り${busy}枚）${current?.progress ? `　${current.progress.message}` : ""}`
-              : `${saved}着を登録しました。`}
+              : `${saved > 0 ? `${saved}着を登録しました。` : ""}${needs.length ? `あと${needs.length}枚、種類を選んでください。` : ""}`}
             {current?.progress?.progress !== undefined && <progress value={current.progress.progress} max={1} />}
             {busy > 0 && <small>終わるまでこの画面のままにしてください。</small>}
           </div>
