@@ -699,11 +699,13 @@ legend.with-icon {
 :root {
   --figure-bg-1: #fbf9f6;
   --figure-bg-2: #e9e3da;
+  --figure-mark: #9a9086;
 }
 @media (prefers-color-scheme: dark) {
   :root {
     --figure-bg-1: #3a362f;
     --figure-bg-2: #24211d;
+    --figure-mark: #8d847a;
   }
 }
 .look-row {

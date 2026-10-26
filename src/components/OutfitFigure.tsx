@@ -8,7 +8,9 @@ import type { Garment } from "../domain/types";
 import { usePhotoUrl } from "./common";
 
 const CX = 70;
-type Pt = [number, number];
+
+/** 足もとの高さ。背の高さはここを基準に大きさを変える */
+const GROUND = 259;
 
 interface Body {
   sw: number; // 肩幅の半分
@@ -16,21 +18,47 @@ interface Body {
   hp: number; // 腰の半分
   arm: number; // 腕の太さの半分
   leg: number; // 脚の中心と体の中心の距離
+  limb: number; // 脚の太さの倍率
 }
 
 function makeBody(profile: Profile): Body {
-  const { width: w, curvy } = bodyShape(profile);
+  const { width: w, belly, curvy } = bodyShape(profile);
+  const hp = (curvy ? 21 : 20) * Math.max(w, (w + belly) / 2);
   return {
     sw: (curvy ? 22 : 25) * w,
-    wa: (curvy ? 14 : 17) * w,
-    hp: (curvy ? 21 : 20) * w,
+    wa: (curvy ? 14 : 17) * belly,
+    hp,
     arm: 5.5 * w,
-    leg: 9.5 * w,
+    leg: hp * 0.47,
+    limb: w,
   };
 }
 
-const path = (pts: Pt[]) => `M${pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join("L")}Z`;
-const mirror = (pts: Pt[]): Pt[] => pts.map(([x, y]) => [2 * CX - x, y] as Pt).reverse();
+/** 角のある点 [x, y]、なめらかにつなぐ点 [x, y, true] */
+type Pt = [number, number] | [number, number, true];
+const f = (n: number) => n.toFixed(1);
+
+/** 点をつないだ形。なめらかな点どうしのあいだは曲線にして、体の丸みを出す */
+function path(pts: Pt[]): string {
+  const n = pts.length;
+  const at = (i: number) => pts[(i + n) % n];
+  let d = `M${f(pts[0][0])},${f(pts[0][1])}`;
+  // 裾のように横にまっすぐ並ぶ2点は曲げない
+  const linked = (a: Pt, b: Pt) => !!(a[2] && b[2]) && a[1] !== b[1];
+  for (let i = 0; i < n; i++) {
+    const [p1, p2] = [at(i), at(i + 1)];
+    const p0 = linked(at(i - 1), p1) ? at(i - 1) : p1;
+    const p3 = linked(p2, at(i + 2)) ? at(i + 2) : p2;
+    if (linked(p1, p2)) {
+      // Catmull-Rom を3次ベジェにする
+      const c1 = [p1[0] + (p2[0] - p0[0]) / 6, p1[1] + (p2[1] - p0[1]) / 6];
+      const c2 = [p2[0] - (p3[0] - p1[0]) / 6, p2[1] - (p3[1] - p1[1]) / 6];
+      d += `C${f(c1[0])},${f(c1[1])} ${f(c2[0])},${f(c2[1])} ${f(p2[0])},${f(p2[1])}`;
+    } else if (i < n - 1) d += `L${f(p2[0])},${f(p2[1])}`;
+  }
+  return `${d}Z`;
+}
+const mirror = (pts: Pt[]): Pt[] => pts.map(([x, y, smooth]) => (smooth ? [2 * CX - x, y, true] : [2 * CX - x, y]) as Pt).reverse();
 
 /** 腕（袖）の形。t は肩(0)から手首(1)までのどこまで覆うか */
 function armPath(b: Body, side: 1 | -1, t: number, loose: number): string {
@@ -57,9 +85,11 @@ function torsoPath(b: Body, hemY: number, loose: number, hemFlare: number, half?
   const left: Pt[] = [
     [CX - 7, 49],
     [CX - b.sw - loose, 56],
-    [CX - b.sw + 3 - loose, 74],
-    [CX - b.wa - loose - 1, 110],
-    [CX - b.hp - loose - hemFlare, Math.max(hemY, 112)],
+    [CX - b.sw + 3 - loose, 74, true],
+    // おなかまわり（体重が重めだと横に張り出す）
+    [CX - Math.max((b.sw - 3 + b.wa + 1) / 2, b.wa + 2) - loose, 92, true],
+    [CX - b.wa - loose - 1, 110, true],
+    [CX - b.hp - loose - hemFlare, Math.max(hemY, 112), true],
   ];
   if (!half) return path([...left, ...mirror(left)]);
   const gap = 3;
@@ -69,7 +99,7 @@ function torsoPath(b: Body, hemY: number, loose: number, hemFlare: number, half?
 
 function legsPath(b: Body, s: Extract<LookShape, { kind: "pants" }>): string {
   const end = s.length === "short" ? 168 : 246;
-  const half = s.length === "short" ? 12 : s.width === "wide" ? 13 : s.width === "slim" ? 5.5 : 7.5;
+  const half = (s.length === "short" ? 12 : s.width === "wide" ? 13 : s.width === "slim" ? 5.5 : 7.5) * b.limb;
   const left: Pt[] = [
     [CX - b.wa - 1, 108],
     [CX - b.hp - 1, 128],
@@ -147,9 +177,11 @@ function layersFor(items: Garment[], b: Body): Layer[] {
       case "top": {
         const t = SLEEVE_T[s.sleeve];
         const hem = s.hem === "short" ? 112 : s.hem === "long" ? 152 : 134;
-        add(g, [...(t ? [armPath(b, -1, t, 1.5), armPath(b, 1, t, 1.5)] : []), torsoPath(b, hem, 1, 1)], [
-          `M${CX - 7},49Q${CX},${s.sleeve === "long" && /ニット|スウェット|パーカー/.test(g.subType) ? 53 : 57} ${CX + 7},49`,
-        ]);
+        add(
+          g,
+          [...(t ? [armPath(b, -1, t, 1.5), armPath(b, 1, t, 1.5)] : []), torsoPath(b, hem, 1, 1)],
+          [`M${CX - 7},49Q${CX},${s.sleeve === "long" && /ニット|スウェット|パーカー/.test(g.subType) ? 53 : 57} ${CX + 7},49`],
+        );
         break;
       }
       case "outer": {
@@ -157,11 +189,18 @@ function layersFor(items: Garment[], b: Body): Layer[] {
         const loose = s.puffy ? 5 : 3;
         const flare = s.length === "short" ? 1 : 5;
         const lines = s.puffy
-          ? [76, 96, 116, 136].filter((y) => y < hem).map((y) => `M${CX - b.sw - 4},${y}L${CX - 4},${y + 2}M${CX + 4},${y + 2}L${CX + b.sw + 4},${y}`)
+          ? [76, 96, 116, 136]
+              .filter((y) => y < hem)
+              .map((y) => `M${CX - b.sw - 4},${y}L${CX - 4},${y + 2}M${CX + 4},${y + 2}L${CX + b.sw + 4},${y}`)
           : [`M${CX - 3},56L${CX - 12},74L${CX - 3},92`, `M${CX + 3},56L${CX + 12},74L${CX + 3},92`];
         add(
           g,
-          [armPath(b, -1, 1, 1.5 + loose), armPath(b, 1, 1, 1.5 + loose), torsoPath(b, hem, loose, flare, -1), torsoPath(b, hem, loose, flare, 1)],
+          [
+            armPath(b, -1, 1, 1.5 + loose),
+            armPath(b, 1, 1, 1.5 + loose),
+            torsoPath(b, hem, loose, flare, -1),
+            torsoPath(b, hem, loose, flare, 1),
+          ],
           lines,
         );
         break;
@@ -173,7 +212,10 @@ function layersFor(items: Garment[], b: Body): Layer[] {
 
 /** 服の形全体を囲む四角（写真を1枚の布として貼るのに使う） */
 function bounds(paths: string[]): { x: number; y: number; w: number; h: number } {
-  const n = paths.join(" ").match(/-?\d+(\.\d+)?/g)!.map(Number);
+  const n = paths
+    .join(" ")
+    .match(/-?\d+(\.\d+)?/g)!
+    .map(Number);
   const xs = n.filter((_, i) => i % 2 === 0);
   const ys = n.filter((_, i) => i % 2 === 1);
   const x = Math.min(...xs);
@@ -233,6 +275,9 @@ function GarmentLayer({ layer, id, figureId }: { layer: Layer; id: string; figur
 export function OutfitFigure({ items, profile }: { items: Garment[]; profile: Profile }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
   const b = makeBody(profile);
+  const { scale } = bodyShape(profile);
+  // 頭のてっぺん（13.5）が、背の高さに合わせてどこに来るか
+  const headTop = GROUND - (GROUND - 13.5) * scale;
   const skin = `url(#${id}-skin)`;
   return (
     <svg className="figure" viewBox="0 0 140 270" role="img" aria-label="着たときのイメージ">
@@ -246,36 +291,53 @@ export function OutfitFigure({ items, profile }: { items: Garment[]; profile: Pr
           <stop offset="0.6" stopColor="#ddd2c4" />
           <stop offset="1" stopColor="#bfb2a2" />
         </linearGradient>
-        {/* 左上から光が当たっているような陰影 */}
+        {/* 左から光が当たった筒のような陰影（体の丸みが出る） */}
         <linearGradient id={`${id}-shade`} x1="0" x2="1" y1="0" y2="0.25">
-          <stop offset="0" stopColor="#fff" stopOpacity="0.28" />
-          <stop offset="0.35" stopColor="#fff" stopOpacity="0" />
-          <stop offset="0.65" stopColor="#000" stopOpacity="0" />
-          <stop offset="1" stopColor="#000" stopOpacity="0.32" />
+          <stop offset="0" stopColor="#000" stopOpacity="0.12" />
+          <stop offset="0.3" stopColor="#fff" stopOpacity="0.22" />
+          <stop offset="0.5" stopColor="#fff" stopOpacity="0" />
+          <stop offset="0.75" stopColor="#000" stopOpacity="0.08" />
+          <stop offset="1" stopColor="#000" stopOpacity="0.36" />
         </linearGradient>
+        {/* 胸とおなかの丸み。体の幅に合わせて広がる */}
+        <radialGradient id={`${id}-volume`} cx="0.4" cy="0.4" r="0.6">
+          <stop offset="0" stopColor="#fff" stopOpacity="0.2" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </radialGradient>
         <filter id={`${id}-drop`} x="-20%" y="-10%" width="140%" height="130%">
           <feDropShadow dx="0.8" dy="1.2" stdDeviation="1.2" floodOpacity="0.25" />
         </filter>
       </defs>
       <rect width="140" height="270" rx="12" fill={`url(#${id}-bg)`} />
-      <ellipse cx={CX} cy="261" rx="34" ry="5" fill="rgba(0,0,0,0.12)" />
+      <ellipse cx={CX} cy="261" rx={(b.hp + 14) * scale} ry="5" fill="rgba(0,0,0,0.12)" />
+      {profile.heightCm && (
+        <g className="figure-height">
+          <line x1="8" x2={CX - 16 * scale} y1={headTop} y2={headTop} stroke="var(--figure-mark)" strokeWidth="0.6" strokeDasharray="2 2" />
+          <text x="8" y={headTop - 3} fontSize="8" fill="var(--figure-mark)">
+            {profile.heightCm}cm
+          </text>
+        </g>
+      )}
 
-      {/* マネキン */}
-      <g fill={skin} stroke="rgba(0,0,0,0.15)" strokeWidth="0.6">
-        <path d={armPath(b, -1, 1, 0)} />
-        <path d={armPath(b, 1, 1, 0)} />
-        <path d={legsPath(b, { kind: "pants", width: "slim", length: "full" })} />
-        <path d={torsoPath(b, 130, 0, 0)} />
-        <rect x={CX - 5} y="40" width="10" height="14" rx="4" />
-        <ellipse cx={CX} cy="28" rx="12" ry="14.5" />
-        {shoePaths(b, "sneakers").map((d, i) => (
-          <path key={i} d={d} />
+      <g transform={`translate(${CX} ${GROUND}) scale(${scale}) translate(${-CX} ${-GROUND})`}>
+        {/* マネキン */}
+        <g fill={skin} stroke="rgba(0,0,0,0.15)" strokeWidth="0.6">
+          <path d={armPath(b, -1, 1, 0)} />
+          <path d={armPath(b, 1, 1, 0)} />
+          <path d={legsPath(b, { kind: "pants", width: "slim", length: "full" })} />
+          <path d={torsoPath(b, 130, 0, 0)} />
+          <rect x={CX - 5} y="40" width="10" height="14" rx="4" />
+          <ellipse cx={CX} cy="28" rx="12" ry="14.5" />
+          {shoePaths(b, "sneakers").map((d, i) => (
+            <path key={i} d={d} />
+          ))}
+        </g>
+
+        {layersFor(items, b).map((l) => (
+          <GarmentLayer key={l.garment.id} layer={l} figureId={id} id={`${id}-${l.garment.id.replace(/[^a-zA-Z0-9]/g, "")}`} />
         ))}
+        <ellipse cx={CX - 3} cy="92" rx={b.wa + 8} ry="36" fill={`url(#${id}-volume)`} pointerEvents="none" />
       </g>
-
-      {layersFor(items, b).map((l) => (
-        <GarmentLayer key={l.garment.id} layer={l} figureId={id} id={`${id}-${l.garment.id.replace(/[^a-zA-Z0-9]/g, "")}`} />
-      ))}
     </svg>
   );
 }

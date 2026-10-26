@@ -23,10 +23,22 @@ describe("lookShape", () => {
 });
 
 describe("bodyShape", () => {
-  it("体重が重めなら横幅を広く（上限あり）", () => {
-    expect(bodyShape({}).width).toBe(1);
-    expect(bodyShape({ heightCm: 170, weightKg: 80 }).width).toBeGreaterThan(1);
-    expect(bodyShape({ heightCm: 150, weightKg: 200 }).width).toBe(1.25);
+  it("何も入れていなければ標準の体型", () => {
+    expect(bodyShape({})).toMatchObject({ width: 1, belly: 1 });
+  });
+  it("体重が重めなら太く、おなかまわりは肩より大きく増える（上限あり）", () => {
+    const b = bodyShape({ heightCm: 170, weightKg: 80 });
+    expect(b.width).toBeGreaterThan(1);
+    expect(b.belly).toBeGreaterThan(b.width);
+    expect(bodyShape({ heightCm: 150, weightKg: 200 })).toMatchObject({ width: 1.35, belly: 1.7 });
+    expect(bodyShape({ heightCm: 180, weightKg: 52 }).width).toBeLessThan(1);
+  });
+  it("背が高いほど大きく描く", () => {
+    expect(bodyShape({ heightCm: 185 }).scale).toBeGreaterThan(bodyShape({ heightCm: 155 }).scale);
+    expect(bodyShape({ heightCm: 230 }).scale).toBe(1);
+  });
+  it("体重だけでも、平均くらいの身長として太さを出す", () => {
+    expect(bodyShape({ weightKg: 90, fit: "mens" }).width).toBeGreaterThan(1);
   });
 });
 
@@ -43,7 +55,14 @@ describe("lookQuery", () => {
 describe("searchLookPhotos（サーバー）", () => {
   const pexels = {
     photos: [
-      { id: 1, url: "https://www.pexels.com/photo/1/", alt: "man in navy shirt", photographer: "A", photographer_url: "https://www.pexels.com/@a", src: { medium: "https://images.pexels.com/1.jpg" } },
+      {
+        id: 1,
+        url: "https://www.pexels.com/photo/1/",
+        alt: "man in navy shirt",
+        photographer: "A",
+        photographer_url: "https://www.pexels.com/@a",
+        src: { medium: "https://images.pexels.com/1.jpg" },
+      },
     ],
   };
   it("APIキーがなければ設定されていないエラー", async () => {
@@ -52,7 +71,11 @@ describe("searchLookPhotos（サーバー）", () => {
   it("Pexelsの結果を出典つきで返し、同じ検索は覚えておく", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify(pexels)));
     const r = await searchLookPhotos({ items, fit: "mens" }, "key", fetchImpl as typeof fetch);
-    expect(r.photos[0]).toMatchObject({ image: "https://images.pexels.com/1.jpg", photographer: "A", pageUrl: "https://www.pexels.com/photo/1/" });
+    expect(r.photos[0]).toMatchObject({
+      image: "https://images.pexels.com/1.jpg",
+      photographer: "A",
+      pageUrl: "https://www.pexels.com/photo/1/",
+    });
     expect(r.source.name).toBe("Pexels");
     const [url, init] = fetchImpl.mock.calls[0] as unknown as [URL, RequestInit];
     expect(url.searchParams.get("query")).toBe("navy shirt beige wide leg pants men outfit");

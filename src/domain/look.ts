@@ -38,24 +38,54 @@ export function lookShape(g: Pick<GarmentInfo, "category" | "subType">): LookSha
         length: has(s, /ショート|ハーフ|短パン/) ? "short" : "full",
       };
     case "onepiece":
-      return { kind: "dress", sleeve: has(s, /ノースリーブ|キャミ/) ? "none" : has(s, /半袖|Tシャツ/) ? "short" : "long", length: has(s, /ロング|マキシ/) ? "long" : "knee" };
+      return {
+        kind: "dress",
+        sleeve: has(s, /ノースリーブ|キャミ/) ? "none" : has(s, /半袖|Tシャツ/) ? "short" : "long",
+        length: has(s, /ロング|マキシ/) ? "long" : "knee",
+      };
     case "shoes":
       return {
         kind: "shoes",
-        style: has(s, /ブーツ/) ? "boots" : has(s, /サンダル|ミュール/) ? "sandals" : has(s, /革|ローファー|パンプス|ヒール/) ? "leather" : "sneakers",
+        style: has(s, /ブーツ/)
+          ? "boots"
+          : has(s, /サンダル|ミュール/)
+            ? "sandals"
+            : has(s, /革|ローファー|パンプス|ヒール/)
+              ? "leather"
+              : "sneakers",
       };
   }
 }
 
-/** 体型（横幅とシルエット）。身長・体重が分からなければ標準 */
-export function bodyShape(profile: Profile): { width: number; curvy: boolean } {
-  const { heightCm: h, weightKg: w } = profile;
-  let width = 1;
-  if (h && w) {
-    const bmi = w / (h / 100) ** 2;
-    width = Math.min(1.25, Math.max(0.85, 1 + (bmi - 21) * 0.035));
-  }
-  return { width, curvy: profile.fit === "womens" };
+/** イラストの枠いっぱいになる身長。これより低い人は小さく描く */
+export const FIGURE_BASE_HEIGHT = 190;
+
+export interface BodyShape {
+  /** 背の高さ。枠いっぱいを1とした倍率 */
+  scale: number;
+  /** 肩・腕・脚の太さの倍率 */
+  width: number;
+  /** おなかまわりの倍率。体重が重めだと肩より大きく増える */
+  belly: number;
+  /** メンズ・レディース（肩と腰の形） */
+  curvy: boolean;
+}
+
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/** 身長・体重から、イラストの体の大きさと太さを決める。分からないところは標準 */
+export function bodyShape(profile: Profile): BodyShape {
+  const { heightCm, weightKg } = profile;
+  const curvy = profile.fit === "womens";
+  // 体重だけ分かるときは、平均くらいの身長として太さを出す
+  const h = heightCm ?? (curvy ? 158 : profile.fit === "mens" ? 171 : 165);
+  const bmi = weightKg ? weightKg / (h / 100) ** 2 : 21;
+  return {
+    scale: heightCm ? clamp(heightCm / FIGURE_BASE_HEIGHT, 0.75, 1) : 0.9,
+    width: clamp(1 + (bmi - 21) * 0.04, 0.82, 1.35),
+    belly: clamp(1 + (bmi - 21) * 0.075, 0.8, 1.7),
+    curvy,
+  };
 }
 
 // 検索語は英語にする（写真サイトの検索は英語のほうが見つかりやすい）
