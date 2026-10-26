@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
 import { ICON } from "./components/icons";
+import type { Profile } from "./domain/profile";
 import type { Feedback, Garment } from "./domain/types";
 import { AddGarments } from "./screens/AddGarments";
 import { ClosetScreen } from "./screens/ClosetScreen";
@@ -11,6 +12,7 @@ import { OutfitScreen } from "./screens/OutfitScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 import * as db from "./storage/db";
+import { loadProfile, saveProfile } from "./storage/profile";
 import { loadAISettings, saveAISettings } from "./storage/settings";
 
 type Tab = "closet" | "outfit" | "shop" | "settings";
@@ -32,6 +34,7 @@ export function App() {
   /** 「この服でコーデ」で選んだ服。変わるたびにコーデ画面を作り直す */
   const [styleWith, setStyleWith] = useState<{ ids: string[]; n: number }>({ ids: [], n: 0 });
   const [settings, setSettings] = useState<AISettings>(loadAISettings);
+  const [profile, setProfile] = useState<Profile>(loadProfile);
   const [notice, setNotice] = useState<string>();
 
   const ai = useMemo(
@@ -72,6 +75,7 @@ export function App() {
         {sheet?.kind === "add" ? (
           <AddGarments
             ai={ai}
+            profile={profile}
             initialFiles={sheet.files}
             onSave={async (g) => {
               await db.saveGarment(g);
@@ -115,6 +119,7 @@ export function App() {
           <OutfitScreen
             key={styleWith.n}
             ai={ai}
+            profile={profile}
             initialMustInclude={styleWith.ids}
             onGoCloset={() => setTab("closet")}
             garments={garments}
@@ -128,9 +133,14 @@ export function App() {
             }}
           />
         ) : tab === "shop" ? (
-          <ShopScreen ai={ai} garments={garments} feedback={feedback} />
+          <ShopScreen ai={ai} garments={garments} feedback={feedback} profile={profile} onGoSettings={() => setTab("settings")} />
         ) : (
           <SettingsScreen
+            profile={profile}
+            onProfileChange={(p) => {
+              setProfile(p);
+              saveProfile(p);
+            }}
             settings={settings}
             onChange={(s) => {
               setSettings(s);

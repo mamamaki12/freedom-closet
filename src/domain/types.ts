@@ -74,6 +74,8 @@ export interface GarmentInfo {
   seasons: Season[];
   formality: Formality;
   warmth: Warmth;
+  /** 「M」「L」「26.5」など。服を登録するときは、いつものサイズを自動で入れる */
+  size?: string;
   note?: string;
 }
 

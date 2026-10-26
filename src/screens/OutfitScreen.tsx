@@ -3,6 +3,7 @@ import { Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, X 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, GarmentThumb } from "../components/common";
+import type { Profile } from "../domain/profile";
 import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
 import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose } from "../domain/types";
 import { FEELS, loadConditions, saveConditions, temperatureFor, type Feel } from "../storage/conditions";
@@ -20,8 +21,10 @@ export function OutfitScreen({
   onFeedback,
   initialMustInclude = [],
   onGoCloset,
+  profile,
 }: {
   ai: ClosetAI;
+  profile: Profile;
   garments: Garment[];
   feedback: Feedback[];
   onFeedback: (f: Feedback) => Promise<void>;
@@ -53,6 +56,7 @@ export function OutfitScreen({
   const ready = canSuggestOutfits(garments);
   // 服の中身が変わったときだけ出し直す（評価のたびに配列が作り直されても無視する）
   const closetJson = useMemo(() => JSON.stringify(garments.map(toInfo)), [garments]);
+  const profileJson = JSON.stringify(profile);
   const validMustInclude = mustInclude.filter((id) => byId.has(id));
   const mustKey = validMustInclude.join(",");
 
@@ -72,6 +76,7 @@ export function OutfitScreen({
         exclude: shownRef.current.length ? shownRef.current : undefined,
       },
       feedback: feedbackRef.current,
+      profile: JSON.parse(profileJson),
     })
       .then((result) => {
         if (seq !== seqRef.current) return;
@@ -80,7 +85,7 @@ export function OutfitScreen({
       })
       .catch((e) => seq === seqRef.current && setError(errorMessage(e)))
       .finally(() => seq === seqRef.current && setLoading(false));
-  }, [ai, ready, closetJson, mustKey, feel, purpose, preference, page]);
+  }, [ai, ready, closetJson, profileJson, mustKey, feel, purpose, preference, page]);
 
   // 条件を変えたら「ほかの案」の続きはやめて、最初から出し直す
   function change(apply: () => void) {

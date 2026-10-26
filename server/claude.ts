@@ -10,9 +10,11 @@ import {
   type AnalyzeResult,
   type outfitsRequestSchema,
   type OutfitsResult,
+  type profileSchema,
   type purchasesRequestSchema,
   type PurchasesResult,
 } from "../src/ai/schemas";
+import { FIT_LABELS } from "../src/domain/profile";
 import { CATEGORY_LABELS, COLOR_NAMES, PURPOSE_LABELS } from "../src/domain/types";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
@@ -69,11 +71,25 @@ export async function analyzeGarment(input: z.infer<typeof analyzeRequestSchema>
   );
 }
 
+/** 身長・体重・いつものサイズを、提案に使える1段落にする（設定していなければ空） */
+function profileText(profile: z.infer<typeof profileSchema>): string {
+  if (!profile) return "";
+  const parts = [
+    profile.heightCm && `身長${profile.heightCm}cm`,
+    profile.weightKg && `体重${profile.weightKg}kg`,
+    profile.fit && `サイズは${FIT_LABELS[profile.fit]}で見る`,
+    profile.usualSize?.tops && `トップスはいつも${profile.usualSize.tops}`,
+    profile.usualSize?.bottoms && `ボトムスはいつも${profile.usualSize.bottoms}`,
+    profile.usualSize?.shoes && `靴は${profile.usualSize.shoes}`,
+  ].filter(Boolean);
+  return parts.length ? `\n本人について：${parts.join("、")}。服の size は登録したサイズ（いつものサイズとの違いは着こなしのヒントにする）。体型について否定的なことは書かない。\n` : "";
+}
+
 export async function suggestOutfits(input: z.infer<typeof outfitsRequestSchema>): Promise<OutfitsResult> {
   const { closet, request, feedback } = input;
   const text = `手持ちの服（JSON）：
 ${JSON.stringify(closet)}
-
+${profileText(input.profile)}
 条件：
 - 必ず使う服のID：${request.mustInclude.length ? request.mustInclude.join(", ") : "なし"}
 - 気温：${request.temperatureC ?? "指定なし"}℃
@@ -97,7 +113,7 @@ export async function suggestPurchases(input: z.infer<typeof purchasesRequestSch
   const { closet, request, feedback } = input;
   const text = `手持ちの服（JSON）：
 ${JSON.stringify(closet)}
-
+${profileText(input.profile)}
 これまでの評価：
 ${JSON.stringify(feedback.map((f) => ({ garmentIds: f.garmentIds, liked: f.liked })))}
 
@@ -110,6 +126,7 @@ ${JSON.stringify(feedback.map((f) => ({ garmentIds: f.garmentIds, liked: f.liked
 - 特定の商品名や価格は書かず、種類と色で提案する（例：黒のワイドパンツ）。
 - 手持ちとほぼ同じ服は避ける。
 - searchQuery はユニクロ・GUの検索窓にそのまま入れる短い日本語（例：黒 ワイドパンツ）。
-- matchesWith には合わせられる手持ちの服のIDを入れ、newOutfitCount は増えるコーデのおおよその数。`;
+- matchesWith には合わせられる手持ちの服のIDを入れ、newOutfitCount は増えるコーデのおおよその数。
+- 本人の身長が分かるときは、似合いやすい丈やシルエットの服を優先し、reason でひとこと触れる。`;
   return ask(purchasesResultSchema, text, "medium");
 }

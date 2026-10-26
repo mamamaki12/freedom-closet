@@ -5,6 +5,7 @@ import { ColorDot, usePhotoUrl } from "../components/common";
 import { ICON } from "../components/icons";
 import { COLORS } from "../domain/colors";
 import { PRESETS, applyPreset } from "../domain/presets";
+import { CLOTHING_SIZES, SHOE_SIZES } from "../domain/profile";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -65,6 +66,9 @@ export function GarmentEditor({
   }
 
   const presets = PRESETS.filter((p) => p.category === category);
+  const baseSizes: readonly string[] = value.category === "shoes" ? SHOE_SIZES : CLOTHING_SIZES;
+  // 一覧にないサイズ（「W30」など）も選ばれた状態で見せる
+  const sizeChoices = value.size && !baseSizes.includes(value.size) ? [value.size, ...baseSizes] : baseSizes;
   const toggleSeason = (s: Season) =>
     set({ seasons: value.seasons.includes(s) ? value.seasons.filter((x) => x !== s) : [...value.seasons, s] });
 
@@ -144,6 +148,23 @@ export function GarmentEditor({
             >
               <ColorDot color={c} />
               <span>{COLORS[c].label}</span>
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="field-group size-row" aria-label="サイズ">
+        <span className="size-row-label">サイズ</span>
+        <div className="chips scroll">
+          {sizeChoices.map((s) => (
+            <button
+              key={s}
+              type="button"
+              className={`chip${value.size === s ? " on" : ""}`}
+              aria-pressed={value.size === s}
+              onClick={() => set({ size: value.size === s ? undefined : s })}
+            >
+              {s}
             </button>
           ))}
         </div>
