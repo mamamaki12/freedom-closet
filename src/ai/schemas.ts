@@ -105,3 +105,33 @@ export const purchasesResultSchema = z.object({
 export type AnalyzeResult = z.infer<typeof analyzeResultSchema>;
 export type OutfitsResult = z.infer<typeof outfitsResultSchema>;
 export type PurchasesResult = z.infer<typeof purchasesResultSchema>;
+
+// ---- 似た着こなしの写真（写真サイトの検索。Claudeは使わない）----
+export const lookPhotosRequestSchema = z.object({
+  items: z
+    .array(z.object({ category: categorySchema, color: colorSchema, subType: z.string().max(40) }))
+    .min(1)
+    .max(6),
+  fit: z.enum(FITS).optional(),
+});
+
+export const lookPhotoSchema = z.object({
+  id: z.string(),
+  /** 一覧に出す縦長の小さい画像 */
+  image: z.string().url(),
+  alt: z.string(),
+  /** 写真サイトの、その写真のページ */
+  pageUrl: z.string().url(),
+  photographer: z.string(),
+  photographerUrl: z.string().url(),
+});
+
+export const lookPhotosResultSchema = z.object({
+  query: z.string(),
+  photos: z.array(lookPhotoSchema),
+  source: z.object({ name: z.string(), url: z.string().url() }),
+});
+
+export type LookPhotosRequest = z.infer<typeof lookPhotosRequestSchema>;
+export type LookPhoto = z.infer<typeof lookPhotoSchema>;
+export type LookPhotosResult = z.infer<typeof lookPhotosResultSchema>;

@@ -6,6 +6,7 @@ import { errorMessage, GarmentThumb } from "../components/common";
 import type { Profile } from "../domain/profile";
 import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
 import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose } from "../domain/types";
+import { LookPhotos, OutfitLook } from "./OutfitLook";
 import { FEELS, loadConditions, saveConditions, temperatureFor, type Feel } from "../storage/conditions";
 
 /** トップスとボトムス、またはワンピースがあれば組める */
@@ -52,6 +53,7 @@ export function OutfitScreen({
   feedbackRef.current = feedback;
 
   const byId = new Map(garments.map((g) => [g.id, g]));
+  const itemsOf = (o: Outfit) => o.garmentIds.flatMap((id) => byId.get(id) ?? []);
   const ratings = new Map(feedback.map((f) => [f.outfitKey, f.liked]));
   const ready = canSuggestOutfits(garments);
   // 服の中身が変わったときだけ出し直す（評価のたびに配列が作り直されても無視する）
@@ -213,17 +215,18 @@ export function OutfitScreen({
             <h3>
               案{page * 3 + i + 1}：{o.title}
             </h3>
-            <div className="grid">
+            <OutfitLook items={itemsOf(o)} profile={profile}>
               {o.garmentIds.map((id) => {
                 const g = byId.get(id);
-                return g ? <GarmentThumb key={id} garment={g} /> : null;
+                return g ? <GarmentThumb key={id} garment={g} size="sm" /> : null;
               })}
-            </div>
+            </OutfitLook>
             <ul>
               {o.explanation.map((line, j) => (
                 <li key={j}>{line}</li>
               ))}
             </ul>
+            <LookPhotos items={itemsOf(o)} profile={profile} />
             <div className="actions">
               <button
                 className={`btn icon-only like${ratings.get(o.key) === true ? " on" : ""}`}

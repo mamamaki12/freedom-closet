@@ -24,6 +24,7 @@
 | `POST /api/ai/analyze` | 写真から種類・色 | 写真（長辺1024pxのJPEGに縮めてから） |
 | `POST /api/ai/outfits` | コーデ3案 | 登録した服の情報（写真なし）、条件、評価 |
 | `POST /api/ai/purchases` | 買い足し提案 | 同上 |
+| `POST /api/looks/photos` | 似た着こなしの写真（Pexels。Claudeは使わない） | 服の種類・色だけ（写真なし） |
 | `GET /api/health` | 動作確認 | |
 
 - 送られたデータは `src/ai/schemas.ts` の形で検査してから Claude に渡す

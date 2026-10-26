@@ -3,8 +3,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { z } from "zod";
-import { analyzeRequestSchema, outfitsRequestSchema, purchasesRequestSchema } from "../src/ai/schemas";
+import { analyzeRequestSchema, lookPhotosRequestSchema, outfitsRequestSchema, purchasesRequestSchema } from "../src/ai/schemas";
 import { analyzeGarment, ClaudeRefusalError, suggestOutfits, suggestPurchases } from "./claude";
+import { PhotosNotConfiguredError, PhotosUpstreamError, searchLookPhotos } from "./photos";
 
 const PORT = Number(process.env.PORT || 8787);
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || "";
@@ -14,6 +15,7 @@ const routes: Record<string, { schema: z.ZodType; handle: (input: never) => Prom
   "/api/ai/analyze": { schema: analyzeRequestSchema, handle: analyzeGarment },
   "/api/ai/outfits": { schema: outfitsRequestSchema, handle: suggestOutfits },
   "/api/ai/purchases": { schema: purchasesRequestSchema, handle: suggestPurchases },
+  "/api/looks/photos": { schema: lookPhotosRequestSchema, handle: (input) => searchLookPhotos(input) },
 };
 
 function send(res: ServerResponse, status: number, body: unknown) {
@@ -56,6 +58,11 @@ const server = createServer(async (req, res) => {
     send(res, 200, await route.handle(input as never));
   } catch (e) {
     if (e instanceof ClaudeRefusalError) return send(res, 422, { error: e.message });
+    if (e instanceof PhotosNotConfiguredError) return send(res, 503, { error: "写真検索は使えるように設定されていません" });
+    if (e instanceof PhotosUpstreamError) {
+      console.error(e.message);
+      return send(res, 502, { error: "写真サイトに接続できませんでした" });
+    }
     if (e instanceof Anthropic.RateLimitError) return send(res, 429, { error: "混み合っています。少し待ってからもう一度試してください" });
     if (e instanceof Anthropic.AuthenticationError) {
       console.error("ANTHROPIC_API_KEY を確認してください");

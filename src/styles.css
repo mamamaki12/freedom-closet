@@ -694,3 +694,86 @@ legend.with-icon {
   color: var(--accent);
   font-weight: 600;
 }
+
+/* コーデの「着たときのイメージ」 */
+:root {
+  --figure-bg-1: #fbf9f6;
+  --figure-bg-2: #e9e3da;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --figure-bg-1: #3a362f;
+    --figure-bg-2: #24211d;
+  }
+}
+.look-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.look-figure {
+  flex: 0 0 44%;
+  margin: 0;
+}
+.look-figure svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.look-figure figcaption {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 2px;
+}
+.grid.look-items {
+  flex: 1;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.look-photos {
+  margin-top: 10px;
+}
+.photo-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+.photo-strip::-webkit-scrollbar {
+  display: none;
+}
+.photo-strip a {
+  flex: none;
+}
+.photo-strip img {
+  display: block;
+  width: 96px;
+  height: 144px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--line);
+}
+.credit {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+.credit a {
+  color: inherit;
+}
+.refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+.refs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+}
