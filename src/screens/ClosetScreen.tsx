@@ -1,4 +1,6 @@
+import { Plus } from "lucide-react";
 import { GarmentThumb } from "../components/common";
+import { ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Garment } from "../domain/types";
 import { PhotoPickers } from "./AddGarments";
 
@@ -28,7 +30,8 @@ export function ClosetScreen({
       <div className="row between">
         <h2>クローゼット（{garments.length}着）</h2>
         <button className="btn primary" onClick={() => onAdd()}>
-          ＋ 服を追加
+          <Plus {...ICON} />
+          服を追加
         </button>
       </div>
       <p className="hint">服をタップすると、直したり、その服でコーデを見たりできます。</p>

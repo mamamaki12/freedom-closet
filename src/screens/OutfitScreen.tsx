@@ -1,7 +1,9 @@
 // コーデを3案。画面を開いたらすぐ出し、条件はタップで変えるだけ（変えたら出し直す）。
+import { Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, GarmentThumb } from "../components/common";
+import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
 import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose } from "../domain/types";
 import { FEELS, loadConditions, saveConditions, temperatureFor, type Feel } from "../storage/conditions";
 
@@ -105,6 +107,7 @@ export function OutfitScreen({
           コーデを出すには、トップスとボトムスを1着ずつ（またはワンピース）登録してください。
         </p>
         <button className="btn primary wide" onClick={onGoCloset}>
+          <Plus {...ICON} />
           服を登録する
         </button>
       </section>
@@ -119,6 +122,7 @@ export function OutfitScreen({
         <div className="chips scroll" role="group" aria-label="体感の気温">
           {FEELS.map((f) => (
             <button key={f.id} type="button" className={`chip${feel === f.id ? " on" : ""}`} aria-pressed={feel === f.id} onClick={() => chooseFeel(f.id)}>
+              <Icon of={FEEL_ICONS[f.id]} />
               {f.label}
             </button>
           ))}
@@ -126,6 +130,7 @@ export function OutfitScreen({
         <div className="chips scroll" role="group" aria-label="出かける目的">
           {PURPOSES.map((p) => (
             <button key={p} type="button" className={`chip${purpose === p ? " on" : ""}`} aria-pressed={purpose === p} onClick={() => choosePurpose(p)}>
+              <Icon of={PURPOSE_ICONS[p]} />
               {PURPOSE_LABELS[p]}
             </button>
           ))}
@@ -143,8 +148,9 @@ export function OutfitScreen({
               ))
             )}
           </div>
-          <button className="btn" onClick={() => setPicking(!picking)}>
-            {picking ? "閉じる" : "使いたい服をえらぶ"}
+          <button className="btn" onClick={() => setPicking(!picking)} aria-expanded={picking}>
+            {picking ? <X {...ICON} /> : <Shirt {...ICON} />}
+            {picking ? "閉じる" : "使いたい服"}
           </button>
         </div>
         {picking && (
@@ -160,6 +166,7 @@ export function OutfitScreen({
 
         <details className="more">
           <summary>
+            <SlidersHorizontal {...ICON} />
             こだわり <span className="hint">{preference || "例：明るめ、楽な服"}</span>
           </summary>
           <form
@@ -178,6 +185,7 @@ export function OutfitScreen({
               enterKeyHint="done"
             />
             <button className="btn" type="submit">
+              <Check {...ICON} />
               反映
             </button>
           </form>
@@ -213,18 +221,22 @@ export function OutfitScreen({
             </ul>
             <div className="actions">
               <button
-                className={`btn${ratings.get(o.key) === true ? " primary" : ""}`}
+                className={`btn icon-only like${ratings.get(o.key) === true ? " on" : ""}`}
                 aria-pressed={ratings.get(o.key) === true}
+                aria-label="好き"
+                title="好き"
                 onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: true, at: Date.now() })}
               >
-                好き
+                <Heart size={22} aria-hidden fill={ratings.get(o.key) === true ? "currentColor" : "none"} />
               </button>
               <button
-                className={`btn${ratings.get(o.key) === false ? " primary" : ""}`}
+                className={`btn icon-only dislike${ratings.get(o.key) === false ? " on" : ""}`}
                 aria-pressed={ratings.get(o.key) === false}
+                aria-label="好みじゃない"
+                title="好みじゃない"
                 onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: false, at: Date.now() })}
               >
-                好みじゃない
+                <ThumbsDown size={22} aria-hidden fill={ratings.get(o.key) === false ? "currentColor" : "none"} />
               </button>
             </div>
           </article>
@@ -237,6 +249,7 @@ export function OutfitScreen({
           disabled={loading}
           onClick={() => (outfits.length === 0 ? setPage(0) : setPage(page + 1))}
         >
+          <RefreshCw {...ICON} className={loading ? "spin" : undefined} />
           {loading ? "考え中…" : outfits.length === 0 && page > 0 ? "最初の案にもどる" : "ほかの案を見る"}
         </button>
       )}

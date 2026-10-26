@@ -1,4 +1,6 @@
+import { Cloud, Smartphone } from "lucide-react";
 import type { AISettings } from "../ai";
+import { ICON } from "../components/icons";
 
 export function SettingsScreen({ settings, onChange }: { settings: AISettings; onChange: (s: AISettings) => void }) {
   return (
@@ -14,7 +16,10 @@ export function SettingsScreen({ settings, onChange }: { settings: AISettings; o
             onChange={() => onChange({ ...settings, provider: "local" })}
           />
           <span>
-            <strong>端末内AI</strong>
+            <strong className="with-icon">
+              <Smartphone {...ICON} />
+              端末内AI
+            </strong>
             <br />
             写真も服の情報も端末から出ません。初回だけ判定用のモデルをダウンロードします（大きいのでWi-Fi推奨）。
           </span>
@@ -27,7 +32,10 @@ export function SettingsScreen({ settings, onChange }: { settings: AISettings; o
             onChange={() => onChange({ ...settings, provider: "claude" })}
           />
           <span>
-            <strong>Claude API</strong>
+            <strong className="with-icon">
+              <Cloud {...ICON} />
+              Claude API
+            </strong>
             <br />
             判定と提案をClaudeが行います。<strong>服を判定するとき、その写真が中継サーバー経由でAnthropicに送られます。</strong>
             コーデ・買い足しの提案では、写真ではなく登録した種類・色などの情報だけを送ります。

@@ -1,7 +1,9 @@
 // 買い足し提案。買う服の種類・色を決めて、ユニクロ・GUの公式サイトの検索結果へつなぐ。
+import { Check, Search, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { ColorChips, ColorDot, errorMessage, GarmentThumb } from "../components/common";
+import { ICON } from "../components/icons";
 import { colorLabel } from "../domain/colors";
 import { CATEGORY_LABELS, toInfo, type ColorName, type Feedback, type Garment, type PurchaseSuggestion } from "../domain/types";
 import { findCurated } from "../shop/curated";
@@ -53,6 +55,7 @@ export function ShopScreen({ ai, garments, feedback }: { ai: ClosetAI; garments:
 
       <details className="more">
         <summary>
+          <SlidersHorizontal {...ICON} />
           条件を変える <span className="hint">{conditionSummary}</span>
         </summary>
         <div className="more-body">
@@ -80,6 +83,7 @@ export function ShopScreen({ ai, garments, feedback }: { ai: ClosetAI; garments:
               />
             </label>
             <button className="btn" type="submit">
+              <Check {...ICON} />
               反映
             </button>
           </form>
@@ -114,11 +118,13 @@ export function ShopScreen({ ai, garments, feedback }: { ai: ClosetAI; garments:
             <div className="actions">
               {curated.map((c) => (
                 <a key={c.url} className="btn primary" href={c.url} target="_blank" rel="noopener noreferrer">
+                  <ShoppingBag {...ICON} />
                   {c.store}：{c.name}
                 </a>
               ))}
               {searchLinks(s.searchQuery).map((l) => (
                 <a key={l.store} className="btn" href={l.url} target="_blank" rel="noopener noreferrer">
+                  <Search {...ICON} />
                   {l.label}
                 </a>
               ))}

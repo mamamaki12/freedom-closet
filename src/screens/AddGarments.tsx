@@ -1,8 +1,10 @@
 // 服の登録。写真を選ぶだけで、AIが種類と色を判定してそのまま登録する。
 // 直したいときは、あとからタップして直す。種類が分からなかった写真だけ、1回タップで選んでもらう。
+import { ArrowLeft, Ban, Camera, Check, Images, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
+import { ICON } from "../components/icons";
 import { applyPreset, PRESETS, presetFor, type Preset } from "../domain/presets";
 import { CATEGORIES, CATEGORY_LABELS, type Garment, type GarmentAnalysis } from "../domain/types";
 import { shrinkPhoto } from "../storage/photo";
@@ -114,7 +116,8 @@ export function AddGarments({
       <div className="row between">
         <h2>服を追加</h2>
         {items.length > 0 && (
-          <button className="btn primary" onClick={() => onDone(saved)}>
+          <button className={busy ? "btn" : "btn primary"} onClick={() => onDone(saved)}>
+            {busy ? <X {...ICON} /> : <Check {...ICON} />}
             {busy ? "ここでやめる" : "完了"}
           </button>
         )}
@@ -126,6 +129,7 @@ export function AddGarments({
           <p className="hint">写真を選ぶだけで、種類と色を判定して登録します。無地の壁や床の上に1着ずつ置いて撮ると当たりやすくなります。</p>
           <div className="actions">
             <button className="btn ghost" onClick={() => onDone(0)}>
+              <ArrowLeft {...ICON} />
               もどる
             </button>
           </div>
@@ -209,8 +213,9 @@ function ChooseType({
             {item.state === "failed" ? "うまく判定できませんでした。" : "種類だけ分かりませんでした。"}どれですか？
             {rest > 0 && <span className="hint">（このあと{rest}枚）</span>}
           </p>
-          <button className="link" onClick={onRemove}>
-            服ではない・この写真はやめる
+          <button className="btn ghost small" onClick={onRemove}>
+            <Ban {...ICON} />
+            服ではない・やめる
           </button>
         </div>
       </div>
@@ -232,18 +237,14 @@ export function PhotoPickers({ onPick, compact }: { onPick: (files: FileList | n
   return (
     <div className={compact ? "pickers compact" : "pickers"}>
       <label className="picker">
-        <span className="picker-icon" aria-hidden>
-          📷
-        </span>
+        <Camera className="picker-icon" size={compact ? 20 : 36} strokeWidth={1.6} aria-hidden />
         {compact ? "続けて撮る" : "カメラで撮る"}
         <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => (onPick(e.target.files), (e.target.value = ""))} />
       </label>
       <label className="picker">
-        <span className="picker-icon" aria-hidden>
-          🖼
-        </span>
-        {compact ? "アルバムから追加" : "アルバムから選ぶ"}
-        {!compact && <small>何枚でもまとめてOK</small>}
+        <Images className="picker-icon" size={compact ? 20 : 36} strokeWidth={1.6} aria-hidden />
+        {compact ? "アルバムから追加" : "アルバムから"}
+        {!compact && <small>何枚でもまとめて選べます</small>}
         <input type="file" accept="image/*" multiple hidden onChange={(e) => (onPick(e.target.files), (e.target.value = ""))} />
       </label>
     </div>

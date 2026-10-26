@@ -212,6 +212,58 @@ select.text {
   align-items: center;
   justify-content: center;
 }
+.btn {
+  gap: 6px;
+}
+.btn svg,
+.chip svg,
+.more summary svg {
+  flex: none;
+}
+/* アイコンだけのボタン（好き・削除・もどる など） */
+.btn.icon-only {
+  min-width: 44px;
+  padding: 8px;
+}
+.btn.like.on {
+  color: #d6336c;
+  border-color: #d6336c;
+}
+.btn.dislike.on {
+  color: var(--text);
+  border-color: var(--text);
+}
+.btn.small {
+  font-size: 0.8rem;
+  min-height: 36px;
+  padding: 4px 8px;
+}
+.icon-btn {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 4px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .btn.primary {
   background: var(--accent);
   color: var(--accent-text);
@@ -331,6 +383,7 @@ button.thumb {
   margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
@@ -435,7 +488,7 @@ button.thumb {
   font-size: 0.9rem;
   display: flex;
   gap: 8px;
-  align-items: baseline;
+  align-items: center;
 }
 .more summary .hint {
   overflow: hidden;
@@ -448,7 +501,7 @@ button.thumb {
 /* 保存ボタンは、下のタブのすぐ上に固定して、いつでも押せるようにする */
 .sticky-actions {
   position: sticky;
-  bottom: calc(52px + env(safe-area-inset-bottom));
+  bottom: calc(58px + env(safe-area-inset-bottom));
   display: flex;
   gap: 8px;
   background: var(--panel);
@@ -486,8 +539,7 @@ button.thumb {
   font-size: 0.75rem;
 }
 .picker-icon {
-  font-size: 2rem;
-  line-height: 1;
+  color: var(--accent);
 }
 
 .pickers.compact .picker {
@@ -496,8 +548,8 @@ button.thumb {
   font-weight: normal;
   padding: 10px;
 }
-.pickers.compact .picker-icon {
-  font-size: 1.2rem;
+.pickers.compact .picker {
+  gap: 8px;
 }
 .thumb.pending img {
   opacity: 0.5;
@@ -564,12 +616,18 @@ button.thumb {
   flex: 1;
   max-width: 180px;
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.68rem;
+  line-height: 1.2;
   color: var(--muted);
   background: none;
   border: 0;
-  padding: 14px 4px;
+  padding: 8px 4px 6px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  -webkit-tap-highlight-color: transparent;
 }
 .tabs button.on {
   color: var(--accent);
