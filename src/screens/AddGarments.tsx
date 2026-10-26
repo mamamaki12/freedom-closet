@@ -232,20 +232,24 @@ function ChooseType({
   );
 }
 
-/** 「撮る」と「アルバムから選ぶ」を分ける（capture を付けるとiPhoneでアルバムを選べないため） */
+/**
+ * 「撮る」と「アルバムから選ぶ」を分ける（capture を付けるとiPhoneでアルバムを選べないため）。
+ * 最初は「カメラで撮る」を大きく、アルバムはその下に細く出す。登録画面の下では2つ並べて小さく出す。
+ */
 export function PhotoPickers({ onPick, compact }: { onPick: (files: FileList | null) => void; compact?: boolean }) {
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => (onPick(e.target.files), (e.target.value = ""));
   return (
-    <div className={compact ? "pickers compact" : "pickers"}>
-      <label className="picker">
-        <Camera className="picker-icon" size={compact ? 20 : 36} strokeWidth={1.6} aria-hidden />
+    <div className={compact ? "pickers compact" : "pickers stacked"}>
+      <label className="picker camera">
+        <Camera className="picker-icon" size={compact ? 20 : 48} strokeWidth={1.6} aria-hidden />
         {compact ? "続けて撮る" : "カメラで撮る"}
-        <input type="file" accept="image/*" capture="environment" hidden onChange={(e) => (onPick(e.target.files), (e.target.value = ""))} />
+        <input type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       </label>
-      <label className="picker">
-        <Images className="picker-icon" size={compact ? 20 : 36} strokeWidth={1.6} aria-hidden />
-        {compact ? "アルバムから追加" : "アルバムから"}
-        {!compact && <small>何枚でもまとめて選べます</small>}
-        <input type="file" accept="image/*" multiple hidden onChange={(e) => (onPick(e.target.files), (e.target.value = ""))} />
+      <label className="picker album">
+        <Images className="picker-icon" size={20} strokeWidth={1.8} aria-hidden />
+        {compact ? "アルバムから追加" : "アルバムから選ぶ"}
+        {!compact && <small>まとめて選べます</small>}
+        <input type="file" accept="image/*" multiple hidden onChange={pick} />
       </label>
     </div>
   );

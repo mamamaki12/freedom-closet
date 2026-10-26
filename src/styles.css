@@ -542,6 +542,39 @@ button.thumb {
   color: var(--accent);
 }
 
+/* 最初の画面：カメラを大きく、アルバムはその下に薄く細長く */
+.pickers.stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pickers.stacked .picker.camera {
+  min-height: 200px;
+  gap: 10px;
+  font-size: 1.1rem;
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 0;
+}
+.pickers.stacked .picker.camera .picker-icon {
+  color: inherit;
+}
+.pickers.stacked .picker.album {
+  min-height: 48px;
+  flex-direction: row;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  font-weight: normal;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.pickers.stacked .picker.album .picker-icon {
+  color: var(--muted);
+}
+.pickers.stacked .picker.album small {
+  margin-left: auto;
+}
 .pickers.compact .picker {
   min-height: 0;
   flex-direction: row;
