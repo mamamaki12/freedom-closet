@@ -1,6 +1,8 @@
 // 登録済みの服を直す・消す。ここから「この服でコーデ」にも進める。
+import { ArrowLeft, Check, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { errorMessage } from "../components/common";
+import { ICON } from "../components/icons";
 import { CATEGORY_LABELS, toInfo, type Garment } from "../domain/types";
 import { GarmentEditor, type Draft } from "./GarmentEditor";
 
@@ -43,10 +45,11 @@ export function EditGarment({
   return (
     <section className="panel">
       <div className="row between">
-        <button className="btn ghost" onClick={onClose} disabled={busy}>
-          ← もどる
+        <button className="btn ghost icon-only" onClick={onClose} disabled={busy} aria-label="もどる" title="もどる">
+          <ArrowLeft size={22} aria-hidden />
         </button>
         <button className="btn" onClick={onStyle} disabled={busy}>
+          <Sparkles {...ICON} />
           この服でコーデ
         </button>
       </div>
@@ -56,17 +59,21 @@ export function EditGarment({
 
       <div className="sticky-actions">
         <button
-          className="btn danger"
+          className={`btn danger${confirmDelete ? "" : " icon-only"}`}
           disabled={busy}
+          aria-label={confirmDelete ? undefined : "削除"}
+          title="削除"
           onClick={() => {
             // 間違えて消さないよう、2回押したら削除
             if (!confirmDelete) return setConfirmDelete(true);
             void run(onDelete);
           }}
         >
-          {confirmDelete ? "もう一度押すと削除" : "削除"}
+          <Trash2 {...ICON} />
+          {confirmDelete && "もう一度押すと削除"}
         </button>
         <button className="btn primary grow" onClick={save} disabled={busy}>
+          <Check {...ICON} />
           保存
         </button>
       </div>

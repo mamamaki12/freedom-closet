@@ -1,6 +1,8 @@
 // 服1着ぶんの入力欄。種類はタップで選ぶだけ、細かい項目は「詳しく」にしまっておく。
+import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { ColorDot, usePhotoUrl } from "../components/common";
+import { ICON } from "../components/icons";
 import { COLORS } from "../domain/colors";
 import { PRESETS, applyPreset } from "../domain/presets";
 import {
@@ -149,6 +151,7 @@ export function GarmentEditor({
 
       <details className="more">
         <summary>
+          <SlidersHorizontal {...ICON} />
           詳しく <span className="hint">{detailSummary(value)}</span>
         </summary>
         <div className="more-body">

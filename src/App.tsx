@@ -1,6 +1,8 @@
+import { Cloud, Settings, Shirt, ShoppingBag, Smartphone, Sparkles, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
+import { ICON } from "./components/icons";
 import type { Feedback, Garment } from "./domain/types";
 import { AddGarments } from "./screens/AddGarments";
 import { ClosetScreen } from "./screens/ClosetScreen";
@@ -12,11 +14,11 @@ import * as db from "./storage/db";
 import { loadAISettings, saveAISettings } from "./storage/settings";
 
 type Tab = "closet" | "outfit" | "shop" | "settings";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "closet", label: "クローゼット" },
-  { id: "outfit", label: "コーデ" },
-  { id: "shop", label: "買い足し" },
-  { id: "settings", label: "設定" },
+const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
+  { id: "closet", label: "クローゼット", icon: Shirt },
+  { id: "outfit", label: "コーデ", icon: Sparkles },
+  { id: "shop", label: "買い足し", icon: ShoppingBag },
+  { id: "settings", label: "設定", icon: Settings },
 ];
 
 /** タブの上にかぶせて開く画面 */
@@ -51,14 +53,17 @@ export function App() {
     <div className="app">
       <header className="top">
         <h1>freedom closet</h1>
-        <span className="badge">{ai.label}</span>
+        <span className="badge with-icon">
+          {ai.id === "claude" ? <Cloud size={14} aria-hidden /> : <Smartphone size={14} aria-hidden />}
+          {ai.label}
+        </span>
       </header>
 
       {notice && (
         <div className="notice" role="status">
           {notice}
-          <button className="link" onClick={() => setNotice(undefined)}>
-            閉じる
+          <button className="icon-btn" onClick={() => setNotice(undefined)} aria-label="閉じる" title="閉じる">
+            <X {...ICON} />
           </button>
         </div>
       )}
@@ -140,12 +145,14 @@ export function App() {
           <button
             key={t.id}
             className={tab === t.id && !sheet ? "on" : ""}
+            aria-current={tab === t.id && !sheet ? "page" : undefined}
             onClick={() => {
               setSheet(null);
               setTab(t.id);
             }}
           >
-            {t.label}
+            <t.icon size={24} strokeWidth={tab === t.id && !sheet ? 2.2 : 1.8} aria-hidden />
+            <span>{t.label}</span>
           </button>
         ))}
       </nav>
