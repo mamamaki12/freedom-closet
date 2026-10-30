@@ -1,19 +1,24 @@
 // 端末内の保存（IndexedDB）。写真もここに入れ、外には送らない。
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
-import type { Feedback, Garment } from "../domain/types";
+import type { Feedback, Garment, WearRecord } from "../domain/types";
 
 interface ClosetDB extends DBSchema {
   garments: { key: string; value: Garment };
   feedback: { key: string; value: Feedback };
+  /** 「着た」記録。1日1件（その日にもう一度押したら上書き） */
+  wear: { key: string; value: WearRecord };
 }
 
 let dbPromise: Promise<IDBPDatabase<ClosetDB>> | null = null;
 
 function db() {
-  dbPromise ??= openDB<ClosetDB>("freedom-closet", 1, {
-    upgrade(d) {
-      d.createObjectStore("garments", { keyPath: "id" });
-      d.createObjectStore("feedback", { keyPath: "outfitKey" });
+  dbPromise ??= openDB<ClosetDB>("freedom-closet", 2, {
+    upgrade(d, oldVersion) {
+      if (oldVersion < 1) {
+        d.createObjectStore("garments", { keyPath: "id" });
+        d.createObjectStore("feedback", { keyPath: "outfitKey" });
+      }
+      if (oldVersion < 2) d.createObjectStore("wear", { keyPath: "day" });
     },
   });
   return dbPromise;
@@ -43,6 +48,20 @@ export async function saveFeedback(f: Feedback): Promise<void> {
 
 export async function deleteFeedback(outfitKey: string): Promise<void> {
   await (await db()).delete("feedback", outfitKey);
+}
+
+/** 着た記録（新しい日から） */
+export async function listWear(): Promise<WearRecord[]> {
+  const all = await (await db()).getAll("wear");
+  return all.sort((a, b) => (a.day < b.day ? 1 : -1));
+}
+
+export async function saveWear(w: WearRecord): Promise<void> {
+  await (await db()).put("wear", w);
+}
+
+export async function deleteWear(day: string): Promise<void> {
+  await (await db()).delete("wear", day);
 }
 
 /** バックアップから戻す。同じIDのものは上書きし、ほかはそのまま残す */

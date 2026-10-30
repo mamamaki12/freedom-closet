@@ -1,3 +1,4 @@
+import type { Profile } from "../domain/profile";
 import type {
   Feedback,
   GarmentAnalysis,
@@ -20,12 +21,15 @@ export interface OutfitInput {
   closet: GarmentInfo[];
   request: OutfitRequest;
   feedback: Feedback[];
+  /** 身長・体重・いつものサイズ（設定したときだけ） */
+  profile?: Profile;
 }
 
 export interface PurchaseInput {
   closet: GarmentInfo[];
   request: PurchaseRequest;
   feedback: Feedback[];
+  profile?: Profile;
 }
 
 /**
