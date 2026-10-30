@@ -12,6 +12,7 @@ import { BodyScanScreen } from "./screens/BodyScanScreen";
 import { ClosetScreen } from "./screens/ClosetScreen";
 import { EditGarment } from "./screens/EditGarment";
 import { OutfitScreen } from "./screens/OutfitScreen";
+import { BackupPanel } from "./screens/BackupPanel";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 import * as db from "./storage/db";
@@ -182,7 +183,9 @@ export function App() {
               setSettings(s);
               saveAISettings(s);
             }}
-          />
+          >
+            <BackupPanel garments={garments} feedback={feedback} onImported={reload} />
+          </SettingsScreen>
         )}
       </main>
 

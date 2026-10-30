@@ -997,3 +997,7 @@ legend.with-icon {
   flex: none;
   margin-top: 3px;
 }
+.btn.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}

@@ -1,4 +1,5 @@
 import { Bot, Cloud, Smartphone } from "lucide-react";
+import type { ReactNode } from "react";
 import type { AISettings } from "../ai";
 import { ICON } from "../components/icons";
 import type { BodyScan } from "../body/types";
@@ -14,6 +15,7 @@ export function SettingsScreen({
   bodyScan,
   onScanBody,
   onDeleteBodyScan,
+  children,
 }: {
   settings: AISettings;
   onChange: (s: AISettings) => void;
@@ -22,6 +24,8 @@ export function SettingsScreen({
   bodyScan?: BodyScan;
   onScanBody: () => void;
   onDeleteBodyScan: () => void;
+  /** 設定画面の下に足すパネル（バックアップなど） */
+  children?: ReactNode;
 }) {
   return (
     <section className="panel">
@@ -77,6 +81,7 @@ export function SettingsScreen({
           <span>Claudeにつながらないときは端末内AIで続ける</span>
         </label>
       )}
+      {children}
     </section>
   );
 }
