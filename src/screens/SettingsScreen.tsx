@@ -1,7 +1,9 @@
 import { Bot, Cloud, Smartphone } from "lucide-react";
 import type { AISettings } from "../ai";
 import { ICON } from "../components/icons";
+import type { BodyScan } from "../body/types";
 import type { Profile } from "../domain/profile";
+import { BodyModelPanel } from "./BodyModelPanel";
 import { ProfilePanel } from "./ProfilePanel";
 
 export function SettingsScreen({
@@ -9,16 +11,23 @@ export function SettingsScreen({
   onChange,
   profile,
   onProfileChange,
+  bodyScan,
+  onScanBody,
+  onDeleteBodyScan,
 }: {
   settings: AISettings;
   onChange: (s: AISettings) => void;
   profile: Profile;
   onProfileChange: (p: Profile) => void;
+  bodyScan?: BodyScan;
+  onScanBody: () => void;
+  onDeleteBodyScan: () => void;
 }) {
   return (
     <section className="panel">
       <h2>設定</h2>
       <ProfilePanel profile={profile} onChange={onProfileChange} />
+      <BodyModelPanel profile={profile} scan={bodyScan} onScan={onScanBody} onDelete={onDeleteBodyScan} />
       <fieldset>
         <legend className="with-icon">
           <Bot {...ICON} />

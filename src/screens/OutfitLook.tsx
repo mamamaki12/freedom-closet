@@ -1,18 +1,29 @@
-// コーデ1案の「着たときのイメージ」（立体風のイラストと手持ちの服）と、ネット上の似た着こなし写真。
+// コーデ1案の「着たときのイメージ」（3Dのマネキンと手持ちの服）と、ネット上の似た着こなし写真。
 import { ExternalLink } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import type { LookPhotosResult } from "../ai/schemas";
-import { OutfitFigure } from "../components/OutfitFigure";
+import { Figure3D } from "../body/Figure3D";
+import type { BodyScan } from "../body/types";
 import type { Profile } from "../domain/profile";
 import type { Garment } from "../domain/types";
 import { lookPhotoFinder } from "../shop/lookPhotos";
 import { referenceLinks } from "../shop/reference";
 
-export function OutfitLook({ items, profile, children }: { items: Garment[]; profile: Profile; children: ReactNode }) {
+export function OutfitLook({
+  items,
+  profile,
+  bodyScan,
+  children,
+}: {
+  items: Garment[];
+  profile: Profile;
+  bodyScan?: BodyScan;
+  children: ReactNode;
+}) {
   return (
     <div className="look-row">
       <figure className="look-figure">
-        <OutfitFigure items={items} profile={profile} />
+        <Figure3D items={items} profile={profile} scan={bodyScan} />
         <figcaption>着たときのイメージ</figcaption>
       </figure>
       <div className="grid look-items">{children}</div>

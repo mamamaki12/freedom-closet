@@ -3,15 +3,18 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
 import { ICON } from "./components/icons";
+import type { BodyScan } from "./body/types";
 import type { Profile } from "./domain/profile";
 import type { Feedback, Garment } from "./domain/types";
 import { AddGarments } from "./screens/AddGarments";
+import { BodyScanScreen } from "./screens/BodyScanScreen";
 import { ClosetScreen } from "./screens/ClosetScreen";
 import { EditGarment } from "./screens/EditGarment";
 import { OutfitScreen } from "./screens/OutfitScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 import * as db from "./storage/db";
+import { loadBodyScan, saveBodyScan } from "./storage/bodyScan";
 import { loadProfile, saveProfile } from "./storage/profile";
 import { loadAISettings, saveAISettings } from "./storage/settings";
 
@@ -24,7 +27,7 @@ const TABS: { id: Tab; label: string; icon: LucideIcon }[] = [
 ];
 
 /** タブの上にかぶせて開く画面 */
-type Sheet = { kind: "add"; files?: File[] } | { kind: "edit"; garment: Garment } | null;
+type Sheet = { kind: "add"; files?: File[] } | { kind: "edit"; garment: Garment } | { kind: "body-scan" } | null;
 
 export function App() {
   const [tab, setTab] = useState<Tab>("closet");
@@ -35,6 +38,8 @@ export function App() {
   const [styleWith, setStyleWith] = useState<{ ids: string[]; n: number }>({ ids: [], n: 0 });
   const [settings, setSettings] = useState<AISettings>(loadAISettings);
   const [profile, setProfile] = useState<Profile>(loadProfile);
+  /** 体の写真から作った体型（数字だけ）。外には送らない */
+  const [bodyScan, setBodyScan] = useState<BodyScan | undefined>(loadBodyScan);
   const [notice, setNotice] = useState<string>();
 
   const ai = useMemo(
@@ -109,6 +114,16 @@ export function App() {
               setTab("outfit");
             }}
           />
+        ) : sheet?.kind === "body-scan" ? (
+          <BodyScanScreen
+            profile={profile}
+            onClose={() => setSheet(null)}
+            onSave={(scan) => {
+              setBodyScan(scan);
+              saveBodyScan(scan);
+              setSheet(null);
+            }}
+          />
         ) : tab === "closet" ? (
           <ClosetScreen
             garments={garments}
@@ -120,6 +135,7 @@ export function App() {
             key={styleWith.n}
             ai={ai}
             profile={profile}
+            bodyScan={bodyScan}
             initialMustInclude={styleWith.ids}
             onGoCloset={() => setTab("closet")}
             garments={garments}
@@ -137,6 +153,12 @@ export function App() {
         ) : (
           <SettingsScreen
             profile={profile}
+            bodyScan={bodyScan}
+            onScanBody={() => setSheet({ kind: "body-scan" })}
+            onDeleteBodyScan={() => {
+              setBodyScan(undefined);
+              saveBodyScan(undefined);
+            }}
             onProfileChange={(p) => {
               setProfile(p);
               saveProfile(p);

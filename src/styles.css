@@ -717,7 +717,7 @@ legend.with-icon {
   flex: 0 0 44%;
   margin: 0;
 }
-.look-figure svg {
+.look-figure svg.figure {
   display: block;
   width: 100%;
   height: auto;
@@ -778,4 +778,130 @@ legend.with-icon {
   align-items: center;
   gap: 2px;
   color: var(--accent);
+}
+
+/* 3Dの「着たときのイメージ」 */
+.figure3d {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 300 / 560;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: radial-gradient(circle at 50% 42%, var(--figure-bg-1), var(--figure-bg-2));
+}
+.figure3d img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.figure3d-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.figure3d-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  opacity: 0.9;
+}
+.viewer3d {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 42%, var(--figure-bg-1), var(--figure-bg-2));
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.viewer3d-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 0 16px;
+  font-weight: 600;
+}
+.viewer3d-canvas {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  touch-action: none;
+}
+.viewer3d-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+.body-preview,
+.scan-result {
+  height: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0;
+  background: radial-gradient(circle at 50% 42%, var(--figure-bg-1), var(--figure-bg-2));
+}
+.scan-result {
+  height: 420px;
+}
+.body-preview .viewer3d-canvas,
+.scan-result .viewer3d-canvas {
+  height: 100%;
+}
+.privacy {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.privacy svg {
+  flex: none;
+  margin-top: 4px;
+}
+.scan-steps {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 4px;
+  counter-reset: step;
+}
+.scan-steps li {
+  flex: 1;
+  text-align: center;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.scan-steps li.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.scan-steps li.done {
+  color: var(--accent);
+}
+.tips {
+  margin: 4px 0 12px;
+  padding-left: 1.2em;
+  font-size: 0.9rem;
 }
