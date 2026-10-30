@@ -1,5 +1,5 @@
 // 端末内AIのコーデ提案。種類・色・気温・目的・過去の評価から点数を付けて上位3案を選ぶ。
-import { colorHarmony, colorLabel } from "../../domain/colors";
+import { colorHarmony, garmentLabel, paletteOf, patternBalance } from "../../domain/colors";
 import { bodyTips, type Profile } from "../../domain/profile";
 import type {
   Feedback,
@@ -112,10 +112,15 @@ export function scoreCombo(items: GarmentInfo[], request: OutfitRequest, fb: Fee
   const reasons: string[] = [];
   let score = 0;
 
-  // 色
-  const harmony = colorHarmony(items.map((g) => g.color));
+  // 色（柄ものは柄の色も数える）
+  const harmony = colorHarmony(paletteOf(items));
   score += harmony.score;
   reasons.push(...harmony.reasons);
+
+  // 柄は1点まで
+  const pattern = patternBalance(items);
+  score += pattern.score;
+  reasons.push(...pattern.reasons);
 
   // 季節・気温
   const climate = climateFor(request.temperatureC);
@@ -150,6 +155,9 @@ export function scoreCombo(items: GarmentInfo[], request: OutfitRequest, fb: Fee
     for (let j = i + 1; j < items.length; j++) pairScore += fb.pairs.get(pairKey(items[i].id, items[j].id)) ?? 0;
   score += Math.max(-3, Math.min(3, pairScore * 0.5));
 
+  // 最近着た服は少し後回し（昨日と同じ服にならないように。靴は毎日でもよいので数えない）
+  score -= recentWearPenalty(items, request.recentlyWorn);
+
   // 自由記述の好み（端末内AIは簡単なキーワードだけ見る）
   const pref = request.preference ?? "";
   if (/明る|華やか|派手/.test(pref) && items.some((g) => !["black", "gray", "navy", "brown"].includes(g.color))) score += 0.5;
@@ -158,6 +166,19 @@ export function scoreCombo(items: GarmentInfo[], request: OutfitRequest, fb: Fee
 
   reasons.push(...stylingTips(items));
   return { items, score, reasons };
+}
+
+/** 直近に着た服ほど大きく引く（1件目=昨日相当 1.0、2件目 0.6、3件目 0.3）。靴は除く */
+export function recentWearPenalty(items: GarmentInfo[], recent: OutfitRequest["recentlyWorn"]): number {
+  if (!recent?.length) return 0;
+  const weights = [1, 0.6, 0.3];
+  let penalty = 0;
+  for (const g of items) {
+    if (g.category === "shoes") continue;
+    const idx = recent.findIndex((r) => r.garmentIds.includes(g.id));
+    if (idx >= 0 && idx < weights.length) penalty += weights[idx];
+  }
+  return Math.min(2.5, penalty);
 }
 
 /** 袖・裾などの着こなしのコツ（種類の名前から判断） */
@@ -190,8 +211,10 @@ export function stylingTips(items: GarmentInfo[]): string[] {
 }
 
 function titleFor(items: GarmentInfo[]): string {
-  const main = items.filter((g) => g.category !== "shoes").map((g) => `${colorLabel(g.color)}の${g.subType || "服"}`);
-  return main.join(" × ");
+  return items
+    .filter((g) => g.category !== "shoes")
+    .map((g) => garmentLabel(g))
+    .join(" × ");
 }
 
 /** 似た案ばかりにならないように、服がかぶる案は後回しにしながら上位を選ぶ */

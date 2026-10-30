@@ -1,5 +1,6 @@
+import { HelpCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { COLORS } from "../domain/colors";
+import { COLORS, shortLabel } from "../domain/colors";
 import type { ColorName, Garment } from "../domain/types";
 
 export function usePhotoUrl(photo: Blob | undefined): string | undefined {
@@ -18,14 +19,18 @@ export function GarmentThumb({
   selected,
   onClick,
   size = "md",
+  caption,
 }: {
   garment: Garment;
   selected?: boolean;
   onClick?: () => void;
   size?: "sm" | "md";
+  /** 名前の下に小さく出す補足（「3日前」など） */
+  caption?: string;
 }) {
   const url = usePhotoUrl(garment.photo);
   const Tag = onClick ? "button" : "div";
+  const label = shortLabel(garment);
   return (
     <Tag
       type={onClick ? "button" : undefined}
@@ -33,11 +38,19 @@ export function GarmentThumb({
       onClick={onClick}
       aria-pressed={onClick ? !!selected : undefined}
     >
-      {url && <img src={url} alt={garment.subType} />}
+      {url && <img src={url} alt={label} />}
+      {garment.needsReview && size === "md" && (
+        <span className="thumb-badge" title="自動判定に自信がない服">
+          <HelpCircle size={14} strokeWidth={2.4} aria-hidden />
+          確認
+        </span>
+      )}
       <span className="thumb-label">
         <ColorDot color={garment.color} />
-        {garment.subType}
+        {garment.subColor && garment.subColor !== garment.color && <ColorDot color={garment.subColor} />}
+        {label}
       </span>
+      {caption && <span className="thumb-caption">{caption}</span>}
     </Tag>
   );
 }
@@ -49,12 +62,14 @@ export function ColorDot({ color }: { color: ColorName }) {
 export function ColorChips({
   value,
   onToggle,
+  small,
 }: {
   value: ColorName[];
   onToggle: (c: ColorName) => void;
+  small?: boolean;
 }) {
   return (
-    <div className="chips">
+    <div className={small ? "chips small" : "chips"}>
       {(Object.keys(COLORS) as ColorName[]).map((c) => (
         <button
           key={c}

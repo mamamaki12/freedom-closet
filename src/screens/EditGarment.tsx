@@ -1,5 +1,5 @@
 // 登録済みの服を直す・消す。ここから「この服でコーデ」にも進める。
-import { ArrowLeft, Check, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, Check, HelpCircle, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { errorMessage } from "../components/common";
 import { ICON } from "../components/icons";
@@ -39,8 +39,12 @@ export function EditGarment({
     }
   }
 
+  // 保存したら「本人が見た」ことになるので、確認の目印は消す
   const save = () =>
-    run(() => onSave({ ...garment, ...draft, subType: draft.subType.trim() || CATEGORY_LABELS[draft.category] }));
+    run(() => {
+      const { needsReview: _r, aiConfidence: _c, ...rest } = garment;
+      return onSave({ ...rest, ...draft, subType: draft.subType.trim() || CATEGORY_LABELS[draft.category] });
+    });
 
   return (
     <section className="panel">
@@ -54,6 +58,12 @@ export function EditGarment({
         </button>
       </div>
 
+      {garment.needsReview && (
+        <p className="status warn with-icon" role="status">
+          <HelpCircle {...ICON} />
+          この服は自動判定に自信がありません。合っていればそのまま「保存」、違っていれば直してから保存してください。
+        </p>
+      )}
       <GarmentEditor photo={garment.photo} value={draft} onChange={setDraft} />
       {error && <p className="error">{error}</p>}
 

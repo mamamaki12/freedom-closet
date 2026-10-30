@@ -1,7 +1,7 @@
 // 服1着ぶんの入力欄。種類はタップで選ぶだけ、細かい項目は「詳しく」にしまっておく。
 import { SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
-import { ColorDot, usePhotoUrl } from "../components/common";
+import { ColorChips, ColorDot, usePhotoUrl } from "../components/common";
 import { ICON } from "../components/icons";
 import { COLORS } from "../domain/colors";
 import { PRESETS, applyPreset } from "../domain/presets";
@@ -11,6 +11,8 @@ import {
   CATEGORY_LABELS,
   FORMALITIES,
   FORMALITY_LABELS,
+  PATTERNS,
+  PATTERN_LABELS,
   SEASONS,
   SEASON_LABELS,
   type Category,
@@ -33,6 +35,7 @@ export const EMPTY_DRAFT: Draft = {
 
 const WARMTH_LABELS = ["薄手", "普通", "厚手"];
 
+/** 「花柄のシャツ」のように、今の入力内容を一言で */
 export function detailSummary(d: Draft): string {
   const seasons = d.seasons.length === 4 ? "通年" : d.seasons.map((s) => SEASON_LABELS[s]).join("・") || "季節なし";
   return `${seasons}／${FORMALITY_LABELS[d.formality]}／${WARMTH_LABELS[d.warmth - 1]}`;
@@ -151,6 +154,35 @@ export function GarmentEditor({
             </button>
           ))}
         </div>
+      </section>
+
+      <section className="field-group" aria-label="柄">
+        <div className="chips">
+          {PATTERNS.map((p) => {
+            const on = (value.pattern ?? "solid") === p;
+            return (
+              <button
+                key={p}
+                type="button"
+                className={`chip${on ? " on" : ""}`}
+                aria-pressed={on}
+                onClick={() => set(p === "solid" ? { pattern: "solid", subColor: undefined } : { pattern: p })}
+              >
+                {PATTERN_LABELS[p]}
+              </button>
+            );
+          })}
+        </div>
+        {value.pattern && value.pattern !== "solid" && (
+          <>
+            <p className="hint">柄の色（分かれば）</p>
+            <ColorChips
+              small
+              value={value.subColor ? [value.subColor] : []}
+              onToggle={(c) => set({ subColor: value.subColor === c ? undefined : c })}
+            />
+          </>
+        )}
       </section>
 
       <section className="field-group size-row" aria-label="サイズ">

@@ -1,4 +1,4 @@
-import type { ColorName } from "./types";
+import { isPatterned, PATTERN_SHORT, type ColorName, type GarmentInfo } from "./types";
 
 export interface ColorInfo {
   label: string;
@@ -29,6 +29,52 @@ export const COLORS: Record<ColorName, ColorInfo> = {
 
 export function colorLabel(c: ColorName): string {
   return COLORS[c].label;
+}
+
+type Describable = Pick<GarmentInfo, "color" | "subColor" | "pattern" | "subType">;
+
+/** 服を一言で。「花柄のシャツ」「白×紺のボーダーTシャツ」「黒のワイドパンツ」 */
+export function garmentLabel(g: Describable): string {
+  const name = g.subType || "服";
+  if (!isPatterned(g)) return `${colorLabel(g.color)}の${name}`;
+  const colors = g.subColor && g.subColor !== g.color ? `${colorLabel(g.color)}×${colorLabel(g.subColor)}` : colorLabel(g.color);
+  return `${colors}の${PATTERN_SHORT[g.pattern!]}${name}`;
+}
+
+/** 一覧のサムネイルに添える短い名前。「花柄シャツ」「Tシャツ」 */
+export function shortLabel(g: Describable): string {
+  return isPatterned(g) ? `${PATTERN_SHORT[g.pattern!]}${g.subType}` : g.subType;
+}
+
+/** コーデに使う色をぜんぶ集める。柄ものは地の色に加えて柄の色（はっきりした色のときだけ）も数える */
+export function paletteOf(items: Pick<GarmentInfo, "color" | "subColor" | "pattern">[]): ColorName[] {
+  const colors: ColorName[] = [];
+  for (const g of items) {
+    colors.push(g.color);
+    if (g.subColor && g.subColor !== g.color && !COLORS[g.subColor].neutral) colors.push(g.subColor);
+  }
+  return colors;
+}
+
+/**
+ * 柄の組み合わせを評価する。基本は「柄は1点まで、ほかは無地」。
+ * 柄×柄は上級者向けなので下げる（同じ系統のボーダー×ボーダーは特に）。
+ */
+export function patternBalance(items: Pick<GarmentInfo, "pattern" | "subType" | "category">[]): HarmonyResult {
+  const patterned = items.filter((g) => isPatterned(g) && g.category !== "shoes");
+  if (patterned.length === 0) return { score: 0, reasons: [] };
+  if (patterned.length === 1) {
+    const g = patterned[0];
+    return {
+      score: 0.5,
+      reasons: [`${PATTERN_SHORT[g.pattern!]}の${g.subType || "服"}を主役にして、ほかは無地でまとめています。`],
+    };
+  }
+  const kinds = new Set(patterned.map((g) => g.pattern));
+  return {
+    score: kinds.size < patterned.length ? -2.5 : -1.5,
+    reasons: ["柄ものが2点以上あるので、ごちゃついて見えやすい組み合わせです。どちらかを無地に替えると落ち着きます。"],
+  };
 }
 
 function hueDistance(a: number, b: number): number {

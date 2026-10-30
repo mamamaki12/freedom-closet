@@ -15,7 +15,7 @@ import {
   type PurchasesResult,
 } from "../src/ai/schemas";
 import { FIT_LABELS } from "../src/domain/profile";
-import { CATEGORY_LABELS, COLOR_NAMES, PURPOSE_LABELS } from "../src/domain/types";
+import { CATEGORY_LABELS, COLOR_NAMES, PATTERN_LABELS, PURPOSE_LABELS } from "../src/domain/types";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
 
@@ -30,7 +30,10 @@ const SYSTEM = `あなたは服のコーディネートを手伝うアシスタ�
 - 服の色名は次の英語IDから選びます：${COLOR_NAMES.join(", ")}
 - 服の種類（category）：${Object.entries(CATEGORY_LABELS)
   .map(([k, v]) => `${k}=${v}`)
-  .join(", ")}`;
+  .join(", ")}
+- 柄（pattern）：${Object.entries(PATTERN_LABELS)
+  .map(([k, v]) => `${k}=${v}`)
+  .join(", ")}。服の JSON に pattern がなければ無地、subColor は2番目の色です。`;
 
 async function ask<T>(
   schema: z.ZodType<T>,
@@ -64,7 +67,15 @@ export async function analyzeGarment(input: z.infer<typeof analyzeRequestSchema>
       { type: "image", source: { type: "base64", media_type: input.mediaType, data: input.imageBase64 } },
       {
         type: "text",
-        text: "この写真の服1着について、種類（category と日本語の subType）と、いちばん面積の大きい色（color）を答えてください。背景や床の色は無視してください。",
+        text: `この写真に写っている服1着について答えてください。
+- category と subType：服の種類。subType は「シャツ」「ワイドパンツ」のような短い日本語。迷う候補があれば alternatives に入れる。
+- color：いちばん面積の大きい色。柄ものや切り替えのある服は「地の色」（面積が最大の色）。背景・床・ハンガーの色は無視する。
+- pattern：柄。無地は solid。細いストライプやボーダーは stripe、チェックは check、花柄は floral、ドットは dot。
+  大きなロゴ・絵・総柄・はっきりした色の切り替え（バイカラーなど）は print。
+- subColor：2番目に目立つ色。無地なら null。
+- 室内の写真は暗く写るので、黒に見えてもわずかに青ければ navy、赤みがあれば brown を選ぶ。
+- 白っぽい服は白と判断してよいが、明らかに黄みがあれば beige。
+- confidence：種類と色の両方に自信があれば 0.9 以上。柄が複雑で地の色が決めにくい、写真が暗い・ぼやけている、種類が2つ以上で迷うときは 0.6 以下。`,
       },
     ],
     "low",
@@ -96,6 +107,9 @@ ${profileText(input.profile)}
 - 目的：${PURPOSE_LABELS[request.purpose]}
 - 好み：${request.preference ?? "指定なし"}
 - もう見せた組み合わせ（服IDを+でつないだもの。これとは違う案にする）：${request.exclude?.length ? request.exclude.join(" / ") : "なし"}
+- 最近着た服（新しい順。靴以外は続けて同じ服にしないよう、少し避ける）：${
+    request.recentlyWorn?.length ? request.recentlyWorn.map((r) => `${r.day}: ${r.garmentIds.join(", ")}`).join(" / ") : "記録なし"
+  }
 
 これまでの評価（liked=true が好き、false が好みじゃない）：
 ${JSON.stringify(feedback.map((f) => ({ garmentIds: f.garmentIds, liked: f.liked })))}
@@ -105,6 +119,8 @@ ${JSON.stringify(feedback.map((f) => ({ garmentIds: f.garmentIds, liked: f.liked
 - トップス＋ボトムス、またはワンピースを基本に、気温に応じてアウター、あれば靴を足す。
 - 「好みじゃない」と評価された組み合わせは出さず、「好き」の傾向を活かす。
 - 3案はなるべく違う服を使う。
+- 柄もの（pattern が solid 以外）は1案に1点まで。柄ものを使うときは、ほかは無地にして、柄の中の色（subColor）とほかの服の色をそろえる。
+- title は「花柄のシャツ × 黒のワイドパンツ」のように、柄があれば柄を、なければ色を付けて服を並べる。
 - explanation には、色合わせの理由と、袖・裾の扱いなど着こなしのコツを2〜4文で。`;
   return ask(outfitsResultSchema, text, "medium");
 }
