@@ -4,7 +4,7 @@ import { buildScan, defaultScan, measureFront, sane, ScanError, type Landmark, t
 // 400x1000 の画像に、棒人間のような体の切り抜きを描く（身長 900px：y=50〜950）
 const W = 400;
 const H = 1000;
-function person(opts: { waist?: number; armsTouching?: boolean } = {}): { mask: Mask; lm: Landmark[] } {
+function person(opts: { waist?: number; armsTouching?: boolean; legsTouching?: boolean } = {}): { mask: Mask; lm: Landmark[] } {
   const data = new Float32Array(W * H);
   const fill = (x0: number, x1: number, y0: number, y1: number) => {
     for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) data[y * W + x] = 1;
@@ -15,6 +15,7 @@ function person(opts: { waist?: number; armsTouching?: boolean } = {}): { mask: 
   fill(200 - waist / 2, 200 + waist / 2, 205, 500); // 胴（股は y=500）
   fill(140, 190, 500, 950); // 左脚（幅50）
   fill(210, 260, 500, 950); // 右脚
+  if (opts.legsTouching) fill(190, 210, 500, 700); // 太ももがくっついている（すき間はひざの近くから）
   // 腕：体から離して（または体につけて）下ろす
   const ax = opts.armsTouching ? 200 - waist / 2 - 30 : 200 - waist / 2 - 45;
   fill(ax, ax + 30, 215, 520);
@@ -53,6 +54,13 @@ describe("measureFront", () => {
     const thin = measureFront(person().mask, person().lm);
     const wide = person({ waist: 200 });
     expect(measureFront(wide.mask, wide.lm).torso[4].width).toBeGreaterThan(thin.torso[4].width * 1.3);
+  });
+  it("太ももがくっついていても、股を腰とひざの位置から見積もった高さより下にしない", () => {
+    const p = person({ legsTouching: true });
+    const m = measureFront(p.mask, p.lm);
+    // 腰の点 y=480、ひざ y=700 → 股は 480 + 220 × 0.12 ≈ 506（すき間が出る y=700 ではない）
+    expect(m.crotchY).toBeCloseTo((506 - 50) / 900, 1);
+    expect(m.crotchY).toBeLessThan((600 - 50) / 900);
   });
   it("腕が胴についていたら、そう知らせる", () => {
     const p = person({ armsTouching: true });

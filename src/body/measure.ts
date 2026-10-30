@@ -16,6 +16,8 @@ export interface Mask {
   width: number;
   height: number;
   data: ArrayLike<number>;
+  /** 読み取り用に写真のまわりに足した余白（上下左右それぞれ、写真の高さ・幅に対する割合） */
+  padding?: number;
 }
 
 export class ScanError extends Error {}
@@ -57,6 +59,10 @@ class Img {
   }
   get h() {
     return this.mask.height;
+  }
+  /** 余白を除いた、もとの写真の高さ */
+  get photoH() {
+    return this.mask.height / (1 + 2 * (this.mask.padding ?? 0));
   }
   /** 点の位置（ピクセル） */
   p(i: number) {
@@ -139,9 +145,32 @@ function checkVisible(lm: Landmark[], idx: number[]) {
   }
 }
 
+/**
+ * まっすぐ立って腕を下ろしているか。ジャンプや大きなポーズ、座っている写真は体型を測れない
+ * （ネット上のファッション写真で試すと、ポーズのまま変な体型になった）。
+ */
+function checkStanding(im: Img) {
+  const sh = mid(im.p(P.lShoulder), im.p(P.rShoulder));
+  const hip = mid(im.p(P.lHip), im.p(P.rHip));
+  const la = im.p(P.lAnkle);
+  const ra = im.p(P.rAnkle);
+  const L = Math.max(1, mid(la, ra).y - sh.y); // 肩から足首まで
+  const tilt = Math.abs(Math.atan2(hip.x - sh.x, hip.y - sh.y));
+  const legsDown = [
+    [P.lHip, P.lKnee, P.lAnkle],
+    [P.rHip, P.rKnee, P.rAnkle],
+  ].every(([h, k, a]) => im.p(k).y > im.p(h).y + L * 0.1 && im.p(a).y > im.p(k).y + L * 0.1);
+  const armsDown = [P.lWrist, P.rWrist].every((w) => im.p(w).y > sh.y - L * 0.05);
+  const feetClose = Math.abs(la.x - ra.x) < L * 0.5;
+  if (tilt > (20 * Math.PI) / 180 || !legsDown || !armsDown || !feetClose) {
+    throw new ScanError("まっすぐ立って、腕を下ろした写真にしてください（ジャンプや大きなポーズ、座った姿勢は読み取れません）");
+  }
+}
+
 export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
   checkVisible(lm, REQUIRED);
   const im = new Img(mask, lm);
+  checkStanding(im);
   const nose = im.p(P.nose);
   const ls = im.p(P.lShoulder);
   const rs = im.p(P.rShoulder);
@@ -157,7 +186,7 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
   const top = im.top(nose.x, nose.y);
   const bottom = im.bottom();
   const H = bottom - top;
-  if (H < im.h * 0.3) throw new ScanError("体が小さく写っています。頭から足先までが画面いっぱいになるように撮ってください");
+  if (H < im.photoH * 0.3) throw new ScanError("体が小さく写っています。頭から足先までが画面いっぱいになるように撮ってください");
   const ny = (y: number) => (y - top) / H;
   const nw = (w: number) => w / H;
   const cx = (y: number) => lerp(sh.x, hip.x, clamp((y - sh.y) / (hip.y - sh.y), 0, 1.3));
@@ -170,12 +199,15 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
   // 肩：点は肩の関節なので、外側の幅はそれより少し広い
   const shoulderW = dist(ls, rs) * 1.22;
 
-  // 股：腰から下へ、脚のあいだにすき間が出るところ
-  let crotch = lerp(hip.y, mid(lk, rk).y, 0.18);
-  for (let y = Math.round(hip.y), gap = 0; y < mid(lk, rk).y; y++) {
+  // 股：腰から下へ、脚のあいだにすき間が出るところ。ただし太ももの内側がくっついていると
+  // すき間は本当の股より下に出るので、腰とひざの点から見積もった高さより下にはしない
+  // （体型データ BodyM の実測で、股は腰の点からひざまでの約1割下）
+  const kneeY = mid(lk, rk).y;
+  let crotch = lerp(hip.y, kneeY, 0.12);
+  for (let y = Math.round(hip.y), gap = 0; y < kneeY; y++) {
     gap = im.on(cx(y), y) ? 0 : gap + 1;
     if (gap >= 3) {
-      crotch = y - 2;
+      crotch = Math.min(crotch, y - 2);
       break;
     }
   }
@@ -190,22 +222,42 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
     return y <= pe.y ? lerp(ps.x, pe.x, (y - ps.y) / (pe.y - ps.y)) : lerp(pe.x, pw.x, (y - pe.y) / (pw.y - pe.y));
   };
   const arms = [armX(P.lShoulder, P.lElbow, P.lWrist), armX(P.rShoulder, P.rElbow, P.rWrist)];
+  // わきの下：肩から下へ、胴と腕のあいだにすき間が出る高さ。それより上は肩なので、腕が重なって見えるのは当たり前
+  const elbowY = Math.max(im.p(P.lElbow).y, im.p(P.rElbow).y);
+  const armpits = arms.map((arm) => {
+    for (let y = Math.round(sh.y) + 1; y < elbowY; y++) {
+      const x = arm(y);
+      const r = im.run(y, cx(y));
+      if (x !== undefined && r && (x < r[0] || x > r[1])) return y;
+    }
+    return undefined;
+  });
+  const aboveArmpit: boolean[] = [];
   for (let i = 0; i < TORSO_LEVELS; i++) {
     // いちばん下は股のすぐ上（股の高さだと片脚しか測れない）
     const y = lerp(torsoTop, crotch - H * 0.012, i / (TORSO_LEVELS - 1));
     const r = im.run(y, cx(y));
     let w = r ? r[1] - r[0] : 0;
-    // 腕が胴についていると、腕まで含めて広く測れてしまうので、腕の太さ（身長の約5%）を引く
-    for (const arm of arms) {
+    let above = false;
+    arms.forEach((arm, side) => {
       const x = arm(y);
-      if (r && x !== undefined && r[0] <= x && x <= r[1]) {
-        armsTouching = true;
-        w -= H * 0.05;
+      if (!r || x === undefined || x < r[0] || x > r[1]) return;
+      const pit = armpits[side];
+      if (pit !== undefined && y < pit) {
+        above = true;
+        return;
       }
-    }
+      // 腕が胴についていると、腕まで含めて広く測れてしまうので、腕の太さ（身長の約5%）を引く
+      armsTouching = true;
+      w -= H * 0.05;
+    });
     if (w <= 0) w = shoulderW * 0.8;
+    aboveArmpit.push(above);
     torso.push({ y: ny(y), width: nw(w), depth: 0 });
   }
+  // わきの下より上は肩の幅まで測ってしまうので、わきの下の高さの胸の幅にそろえる
+  const chest = torso.find((_, i) => !aboveArmpit[i]);
+  if (chest) torso.forEach((t, i) => aboveArmpit[i] && (t.width = chest.width));
   // 急に細くなるところは、股や腕のすき間を拾ったものなので、ひとつ上の幅を使う
   for (let i = 1; i < torso.length; i++) if (torso[i].width < torso[i - 1].width * 0.75) torso[i].width = torso[i - 1].width;
 
@@ -279,7 +331,7 @@ export function measureSide(mask: Mask, lm: Landmark[], front: FrontMeasure): { 
   const nose = im.p(P.nose);
   const top = im.top(nose.x, nose.y);
   const H = im.bottom() - top;
-  if (H < im.h * 0.3) throw new ScanError("体が小さく写っています。頭から足先までが画面いっぱいになるように撮ってください");
+  if (H < im.photoH * 0.3) throw new ScanError("体が小さく写っています。頭から足先までが画面いっぱいになるように撮ってください");
   const Y = (n: number) => top + n * H;
   const sp = im.p(s);
   const hp = im.p(h);
@@ -309,8 +361,9 @@ export function buildScan(front: FrontMeasure, side?: ReturnType<typeof measureS
   });
   const legs = front.legs.map((l, i) => {
     const d = side?.legs[i];
-    // 横からは両脚が重なって見えるので、1本分の太さとして扱う
-    return { ...l, depth: d && d > l.width * 0.6 && d < l.width * 1.8 ? d : l.width * 1.05 };
+    // 横からは両脚が重なって見えるので、1本分の太さとして扱う。
+    // 左右の脚が前後にずれていると厚く出るので、幅の1.15倍まで（脚の厚みは幅とだいたい同じ。実測の太もも回りと比べて決めた）
+    return { ...l, depth: d && d > l.width * 0.6 ? Math.min(d, l.width * 1.15) : l.width * 1.05 };
   });
   const headDepth = side?.head && side.head > front.head.width * 0.8 && side.head < front.head.width * 1.6 ? side.head : front.head.depth;
   return sane({
