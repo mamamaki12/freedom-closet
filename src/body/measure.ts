@@ -403,20 +403,27 @@ export function sane(s: BodyScan): BodyScan {
   };
 }
 
-/** 写真がないときの標準の体型。身長・体重・メンズ/レディースで太さを変える */
+/**
+ * 写真がないときの標準の体型。身長・体重・メンズ/レディースで太さを変える。
+ * 太さの係数は、Amazon 公開の体型データ BodyM（24人）の正面・横のシルエットに合わせた：
+ * 体格指数が1増えるごとに、正面の幅は約1.6%、おなかは約2.6%、厚みは約3%増える。
+ */
 export function defaultScan(profile: Profile): BodyScan {
-  const { width: w, belly, curvy } = bodyShape(profile);
+  const { curvy, bmi } = bodyShape(profile);
+  const w = clamp(0.95 + (bmi - 21) * 0.016, 0.8, 1.3);
+  const belly = clamp(0.99 + (bmi - 21) * 0.026, 0.8, 1.5);
+  const thick = clamp(1 + (bmi - 21) * 0.015, 0.85, 1.3);
   const hipW = Math.max(w, (w + belly) / 2);
   // 胸 → おなか → 腰 → 股（上から10段）
   const base = curvy
-    ? [0.19, 0.185, 0.17, 0.155, 0.148, 0.155, 0.175, 0.2, 0.21, 0.205]
-    : [0.205, 0.2, 0.19, 0.178, 0.172, 0.175, 0.185, 0.195, 0.2, 0.198];
+    ? [0.205, 0.2, 0.183, 0.167, 0.159, 0.167, 0.188, 0.214, 0.225, 0.22]
+    : [0.195, 0.19, 0.18, 0.169, 0.163, 0.166, 0.176, 0.185, 0.19, 0.188];
   const torso = base.map((width, i) => {
-    const y = lerp(0.205, 0.5, i / (base.length - 1));
+    const y = lerp(0.205, 0.54, i / (base.length - 1));
     // おなかまわり（真ん中あたり）は体重の影響を大きく、胸と腰はほどほど。段差が出ないようになめらかに
     const bump = Math.sin(Math.PI * Math.min(1, i / (base.length - 1.5))) ** 1.5;
     const k = lerp(i >= base.length / 2 ? hipW : w, belly, bump);
-    return { y, width: width * k, depth: width * k * lerp(0.68, 0.8, i / (base.length - 1)) };
+    return { y, width: width * k, depth: width * k * thick * lerp(0.68, 0.8, i / (base.length - 1)) };
   });
   const legBase = [0.105, 0.095, 0.08, 0.065, 0.062, 0.064, 0.055, 0.042];
   return {
@@ -426,12 +433,33 @@ export function defaultScan(profile: Profile): BodyScan {
     head: { width: 0.09, height: 0.13, depth: 0.105 },
     neck: { y: 0.145, width: 0.06 * Math.sqrt(w) },
     // 肩幅は骨格で決まるので、体重ではあまり変わらない
-    shoulder: { y: 0.185, width: (curvy ? 0.225 : 0.25) * (1 + (w - 1) * 0.4) },
+    shoulder: { y: 0.185, width: (curvy ? 0.245 : 0.25) * (1 + (w - 1) * 0.4) },
     torso,
-    crotchY: 0.51,
+    crotchY: 0.54,
     ankleY: 0.955,
-    legGap: (curvy ? 0.1 : 0.095) * hipW,
-    legs: legBase.map((width, i) => ({ t: i / (legBase.length - 1), width: width * hipW, depth: width * hipW * 1.05 })),
+    legGap: (curvy ? 0.11 : 0.105) * hipW,
+    legs: legBase.map((width, i) => ({ t: i / (legBase.length - 1), width: width * hipW, depth: width * hipW * 1.05 * thick })),
     arm: { length: 0.33, upper: 0.05 * w, wrist: 0.032 * Math.sqrt(w) },
   };
+}
+
+/** 服を着た写真でも、下着の体型なら標準体型の何倍までありえるか（BodyM の24人では 0.75〜1.25 倍に収まった） */
+const CLOTHES_TOLERANCE = 1.2;
+
+/**
+ * 服を着て撮った写真の分をさし引く。
+ * 肩・腰・ひざなどの骨格の点は服に影響されにくいので、長さはそのまま使う。
+ * 胴と脚の太さは服でふくらむので、身長・体重から想定される太さよりずっと太いところは、服の分とみなして想定値に寄せる。
+ * 身長か体重が未登録なら、想定が立てられないので何もしない。
+ */
+export function fitClothes(scan: BodyScan, profile: Profile): { scan: BodyScan; loose: boolean } {
+  if (!bodyShape(profile).known) return { scan, loose: false };
+  const expect = defaultScan(profile);
+  const cap = (v: number, e: number) => Math.min(v, e * CLOTHES_TOLERANCE);
+  const torso = scan.torso.map((t, i) => ({ ...t, width: cap(t.width, expect.torso[i].width), depth: cap(t.depth, expect.torso[i].depth) }));
+  const legs = scan.legs.map((l, i) => ({ ...l, width: cap(l.width, expect.legs[i].width), depth: cap(l.depth, expect.legs[i].depth) }));
+  const ratios = [...scan.torso.map((t, i) => t.width / expect.torso[i].width), ...scan.legs.map((l, i) => l.width / expect.legs[i].width)];
+  // 半分以上の段が想定よりずっと太ければ、ゆったりした服と判断する
+  const loose = ratios.filter((r) => r > CLOTHES_TOLERANCE).length >= ratios.length / 2;
+  return { scan: { ...scan, torso, legs }, loose };
 }

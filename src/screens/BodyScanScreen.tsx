@@ -2,7 +2,7 @@
 import { ArrowLeft, Check, Lock, RotateCcw, SkipForward } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Viewer3D } from "../body/Figure3D";
-import { buildScan, type FrontMeasure } from "../body/measure";
+import { buildScan, fitClothes, type FrontMeasure } from "../body/measure";
 import type { BodyScan } from "../body/types";
 import { errorMessage } from "../components/common";
 import { ICON } from "../components/icons";
@@ -15,7 +15,7 @@ type Step = "front" | "side" | "done";
 const GUIDE: Record<Exclude<Step, "done">, { title: string; tips: string[] }> = {
   front: {
     title: "1枚め：正面",
-    tips: ["頭から足先までが画面に入るように", "まっすぐ立って、両腕を体から少し離し、足は肩幅くらいに", "コートやスカートなど、ゆったりした服だと服の形が体型になります", "誰かに撮ってもらうか、タイマーで。スマホは腰の高さに"],
+    tips: ["頭から足先までが画面に入るように", "まっすぐ立って、両腕を体から少し離し、足は肩幅くらいに", "下着か、体にぴったりした服で。ゆったりした服だと、太さは身長・体重からの見積もりになります", "誰かに撮ってもらうか、タイマーで。スマホは腰の高さに"],
   },
   side: {
     title: "2枚め：横向き",
@@ -29,7 +29,16 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
   const [error, setError] = useState<string>();
   const [front, setFront] = useState<FrontMeasure>();
   const [scan, setScan] = useState<BodyScan>();
+  const [loose, setLoose] = useState(false);
   const scale = useMemo(() => bodyShape(profile).scale, [profile]);
+
+  // 服を着て撮った分をさし引く（ゆったりした服なら、そう知らせる）
+  function finish(raw: BodyScan) {
+    const r = fitClothes(raw, profile);
+    setScan(r.scan);
+    setLoose(r.loose);
+    setStep("done");
+  }
 
   async function read(files: FileList | null) {
     const photo = files?.[0];
@@ -43,8 +52,7 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
         setFront(f);
         setStep("side");
       } else if (front) {
-        setScan(buildScan(front, await scanSide(photo, front)));
-        setStep("done");
+        finish(buildScan(front, await scanSide(photo, front)));
       }
     } catch (e) {
       setError(errorMessage(e));
@@ -55,13 +63,13 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
 
   function skipSide() {
     if (!front) return;
-    setScan(buildScan(front));
-    setStep("done");
+    finish(buildScan(front));
   }
 
   function restart() {
     setFront(undefined);
     setScan(undefined);
+    setLoose(false);
     setError(undefined);
     setStep("front");
   }
@@ -114,6 +122,7 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
           <p className="hint">
             {scan.views.includes("side") ? "正面と横向きの写真から作りました。" : "正面の写真から作りました（体の厚みは見積もりです）。"}
             {front?.armsTouching && "腕が体についていたので、胴の幅は少し不正確かもしれません。"}
+            {loose && "ゆったりした服のようなので、胴や脚の太さは身長・体重からの見積もりに寄せました。下着か、体にぴったりした服で撮ると正確になります。"}
           </p>
           <div className="sticky-actions">
             <button className="btn" onClick={restart}>

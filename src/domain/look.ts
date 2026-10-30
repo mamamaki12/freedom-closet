@@ -69,6 +69,10 @@ export interface BodyShape {
   belly: number;
   /** メンズ・レディース（肩と腰の形） */
   curvy: boolean;
+  /** 体格指数（体重÷身長²）。分からなければ21。3Dの標準体型の太さに使う */
+  bmi: number;
+  /** 身長と体重の両方が登録されているか */
+  known: boolean;
 }
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
@@ -85,6 +89,8 @@ export function bodyShape(profile: Profile): BodyShape {
     width: clamp(1 + (bmi - 21) * 0.04, 0.82, 1.35),
     belly: clamp(1 + (bmi - 21) * 0.075, 0.8, 1.7),
     curvy,
+    bmi,
+    known: !!heightCm && !!weightKg,
   };
 }
 

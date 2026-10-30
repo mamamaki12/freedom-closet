@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildScan, defaultScan, measureFront, sane, ScanError, type Landmark, type Mask } from "../src/body/measure";
+import { buildScan, defaultScan, fitClothes, measureFront, sane, ScanError, type Landmark, type Mask } from "../src/body/measure";
 
 // 400x1000 の画像に、棒人間のような体の切り抜きを描く（身長 900px：y=50〜950）
 const W = 400;
@@ -101,5 +101,38 @@ describe("sane / defaultScan", () => {
     const b = defaultScan({ heightCm: 170, weightKg: 95, fit: "mens" });
     expect(b.torso[5].width).toBeGreaterThan(a.torso[5].width * 1.2);
     expect(b.shoulder.width / a.shoulder.width).toBeLessThan(b.torso[5].width / a.torso[5].width);
+  });
+});
+
+describe("fitClothes（服を着た写真の分をさし引く）", () => {
+  const profile = { heightCm: 170, weightKg: 62, fit: "mens" as const };
+  it("下着の体型（標準体型に近い）はそのまま", () => {
+    const scan = defaultScan(profile);
+    const r = fitClothes(scan, profile);
+    expect(r.loose).toBe(false);
+    expect(r.scan.torso.map((t) => t.width)).toEqual(scan.torso.map((t) => t.width));
+  });
+  it("コートのように全体がずっと太ければ、想定の太さに寄せて「ゆったり」と知らせる", () => {
+    const base = defaultScan(profile);
+    const coat = { ...base, torso: base.torso.map((t) => ({ ...t, width: t.width * 1.6, depth: t.depth * 1.6 })), legs: base.legs.map((l) => ({ ...l, width: l.width * 1.5 })) };
+    const r = fitClothes(coat, profile);
+    expect(r.loose).toBe(true);
+    r.scan.torso.forEach((t, i) => expect(t.width).toBeCloseTo(base.torso[i].width * 1.2, 5));
+    r.scan.legs.forEach((l, i) => expect(l.width).toBeCloseTo(base.legs[i].width * 1.2, 5));
+    // 骨格で決まる長さはそのまま
+    expect(r.scan.crotchY).toBe(coat.crotchY);
+    expect(r.scan.shoulder).toEqual(coat.shoulder);
+  });
+  it("やせている人の細さはそのまま", () => {
+    const base = defaultScan(profile);
+    const thin = { ...base, torso: base.torso.map((t) => ({ ...t, width: t.width * 0.8 })) };
+    expect(fitClothes(thin, profile).scan.torso[4].width).toBeCloseTo(base.torso[4].width * 0.8, 5);
+  });
+  it("身長か体重が未登録なら、想定が立てられないので何もしない", () => {
+    const base = defaultScan(profile);
+    const coat = { ...base, torso: base.torso.map((t) => ({ ...t, width: t.width * 1.6 })) };
+    const r = fitClothes(coat, { fit: "mens" });
+    expect(r.loose).toBe(false);
+    expect(r.scan).toBe(coat);
   });
 });
