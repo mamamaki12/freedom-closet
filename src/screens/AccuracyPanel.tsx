@@ -31,7 +31,7 @@ export function AccuracyPanel() {
     <fieldset>
       <legend>自動判定の記録（検証用）</legend>
       <p className="hint">
-        服を登録するたびに、AIの判定と、直したあとの値を記録しています（写真は残しません）。直さずに保存したものは「合っていた」と数えます。
+        服を登録するたびに、AIの判定と、本人が直したあとの値を記録しています（写真は残しません）。直さなかったものは「合っていた」と数えます。
       </p>
       {error && <p className="error">{error}</p>}
       {records && records.length === 0 && <p className="hint">まだ記録がありません。</p>}

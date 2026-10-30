@@ -5,6 +5,7 @@ import type { AIProviderId } from "../ai/types";
 import type { Category, ColorName } from "../domain/types";
 
 export interface AnalysisRecord {
+  /** 登録した服のID（あとから直したときに記録を更新するため） */
   id: string;
   at: number;
   provider: AIProviderId;
@@ -30,6 +31,13 @@ function db() {
 
 export async function addRecord(r: AnalysisRecord): Promise<void> {
   await (await db()).put("records", r);
+}
+
+/** 本人があとから直した値を記録に反映する。記録がなければ何もしない */
+export async function updateFinal(id: string, final: AnalysisRecord["final"]): Promise<void> {
+  const d = await db();
+  const r = await d.get("records", id);
+  if (r) await d.put("records", { ...r, final });
 }
 
 export async function listRecords(): Promise<AnalysisRecord[]> {
