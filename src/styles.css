@@ -251,7 +251,7 @@ select.text {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 8px;
 }
 .grid.small {
@@ -515,8 +515,8 @@ button.thumb {
   margin: 0 0 4px;
 }
 .choose-photo {
-  width: 72px;
-  height: 72px;
+  width: 96px;
+  height: 96px;
   object-fit: cover;
   border-radius: 8px;
   flex: none;

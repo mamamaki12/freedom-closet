@@ -61,6 +61,18 @@ describe("ClaudeAI", () => {
       ai.suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] }),
     ).rejects.toThrow("混み合っています");
   });
+
+  it("つながらないときは、どうすればよいかを伝える", async () => {
+    const down = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const ai = new ClaudeAI("", down as unknown as typeof fetch);
+    await expect(ai.suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] })).rejects.toThrow("端末内AI");
+    const bad = vi.fn(async () => new Response("<html>", { status: 502 }));
+    await expect(
+      new ClaudeAI("", bad as unknown as typeof fetch).suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] }),
+    ).rejects.toThrow("（502）");
+  });
 });
 
 describe("withFallback", () => {

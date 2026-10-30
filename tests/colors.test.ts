@@ -9,6 +9,14 @@ describe("nearestColorName", () => {
     expect(nearestColorName([200, 40, 50])).toBe("red");
     expect(nearestColorName([215, 195, 160])).toBe("beige");
   });
+  it("実際の写真で出やすい色を取り違えない", () => {
+    // サンプル写真から取った色
+    expect(nearestColorName([207, 51, 108])).toBe("pink"); // 濃いピンクのワンピース
+    expect(nearestColorName([41, 44, 57])).toBe("navy"); // 室内で暗く写ったネイビーのパンツ
+    expect(nearestColorName([42, 50, 64])).toBe("navy"); // デニムシャツ
+    expect(nearestColorName([44, 44, 46])).toBe("black"); // チャコールのニット
+    expect(nearestColorName([22, 32, 39])).toBe("black"); // 黒のダウン
+  });
 });
 
 describe("colorHarmony", () => {

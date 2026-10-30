@@ -23,6 +23,8 @@ export class ClaudeAIError extends Error {
 
 type Fetch = typeof fetch;
 
+const UNREACHABLE = "Claudeにつながりませんでした。少しあとでもう一度試すか、設定で「端末内AI」に切り替えてください";
+
 export class ClaudeAI implements ClosetAI {
   readonly id = "claude" as const;
   readonly label = "Claude API";
@@ -40,10 +42,13 @@ export class ClaudeAI implements ClosetAI {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
       signal,
+    }).catch((e: unknown) => {
+      if (signal?.aborted) throw e;
+      throw new ClaudeAIError(`${UNREACHABLE}（通信エラー）`, 0);
     });
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}) as { error?: string });
-      throw new ClaudeAIError((detail as { error?: string }).error ?? `サーバーエラー（${res.status}）`, res.status);
+      throw new ClaudeAIError((detail as { error?: string }).error ?? `${UNREACHABLE}（${res.status}）`, res.status);
     }
     return parse(await res.json());
   }
