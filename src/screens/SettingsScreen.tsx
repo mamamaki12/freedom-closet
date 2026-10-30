@@ -1,13 +1,29 @@
-import { Cloud, Smartphone } from "lucide-react";
+import { Bot, Cloud, Smartphone } from "lucide-react";
 import type { AISettings } from "../ai";
 import { ICON } from "../components/icons";
+import type { Profile } from "../domain/profile";
+import { ProfilePanel } from "./ProfilePanel";
 
-export function SettingsScreen({ settings, onChange }: { settings: AISettings; onChange: (s: AISettings) => void }) {
+export function SettingsScreen({
+  settings,
+  onChange,
+  profile,
+  onProfileChange,
+}: {
+  settings: AISettings;
+  onChange: (s: AISettings) => void;
+  profile: Profile;
+  onProfileChange: (p: Profile) => void;
+}) {
   return (
     <section className="panel">
       <h2>設定</h2>
+      <ProfilePanel profile={profile} onChange={onProfileChange} />
       <fieldset>
-        <legend>使うAI</legend>
+        <legend className="with-icon">
+          <Bot {...ICON} />
+          使うAI
+        </legend>
         <label className="radio">
           <input
             type="radio"

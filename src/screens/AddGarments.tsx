@@ -6,6 +6,7 @@ import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
 import { ICON } from "../components/icons";
 import { applyPreset, PRESETS, presetFor, type Preset } from "../domain/presets";
+import { sizeGroup, type Profile } from "../domain/profile";
 import { CATEGORIES, CATEGORY_LABELS, type Garment, type GarmentAnalysis } from "../domain/types";
 import { shrinkPhoto } from "../storage/photo";
 import { EMPTY_DRAFT, type Draft } from "./GarmentEditor";
@@ -35,18 +36,29 @@ export function draftFromAnalysis(a: GarmentAnalysis): Draft | undefined {
   return preset ? applyPreset(base, preset) : { ...base, category: a.category, subType: a.subType || CATEGORY_LABELS[a.category] };
 }
 
-function toGarment(photo: Blob, d: Draft): Garment {
-  return { ...d, subType: d.subType.trim() || CATEGORY_LABELS[d.category], id: crypto.randomUUID(), createdAt: Date.now(), photo };
+function toGarment(photo: Blob, d: Draft, profile: Profile): Garment {
+  // サイズは写真から分からないので、いつものサイズを入れておく（違えばあとで直す）
+  const size = d.size ?? profile.usualSize?.[sizeGroup(d.category)];
+  return {
+    ...d,
+    ...(size ? { size } : {}),
+    subType: d.subType.trim() || CATEGORY_LABELS[d.category],
+    id: crypto.randomUUID(),
+    createdAt: Date.now(),
+    photo,
+  };
 }
 
 export function AddGarments({
   ai,
+  profile,
   initialFiles,
   onSave,
   onEdit,
   onDone,
 }: {
   ai: ClosetAI;
+  profile: Profile;
   /** クローゼット画面で先に選んだ写真 */
   initialFiles?: File[];
   onSave: (g: Garment, analysis?: { result: GarmentAnalysis; elapsedMs: number }) => Promise<void>;
@@ -69,7 +81,7 @@ export function AddGarments({
     setItems((cur) => cur.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
   async function save(it: Item, draft: Draft, analysis?: { result: GarmentAnalysis; elapsedMs: number }, photo = it.photo) {
-    const garment = toGarment(photo, draft);
+    const garment = toGarment(photo, draft, profile);
     await onSave(garment, analysis);
     update(it.key, { state: "saved", garment, draft, photo });
   }

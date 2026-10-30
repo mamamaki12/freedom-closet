@@ -1,5 +1,6 @@
 // 端末内AIのコーデ提案。種類・色・気温・目的・過去の評価から点数を付けて上位3案を選ぶ。
 import { colorHarmony, colorLabel } from "../../domain/colors";
+import { bodyTips, type Profile } from "../../domain/profile";
 import type {
   Feedback,
   Formality,
@@ -218,7 +219,12 @@ export function pickDiverse(scored: ScoredCombo[], n: number): ScoredCombo[] {
   return picked;
 }
 
-export function suggestOutfitsLocal(closet: GarmentInfo[], request: OutfitRequest, feedback: Feedback[]): Outfit[] {
+export function suggestOutfitsLocal(
+  closet: GarmentInfo[],
+  request: OutfitRequest,
+  feedback: Feedback[],
+  profile: Profile = {},
+): Outfit[] {
   const fb = indexFeedback(feedback);
   const shown = new Set(request.exclude ?? []);
   const combos = buildCombos(closet, request.temperatureC)
@@ -231,6 +237,7 @@ export function suggestOutfitsLocal(closet: GarmentInfo[], request: OutfitReques
   const scored = combos.map((c) => scoreCombo(c.items, request, fb));
   return pickDiverse(scored, MAX_OUTFITS).map((s) => {
     const ids = s.items.map((g) => g.id);
-    return { key: outfitKey(ids), garmentIds: ids, title: titleFor(s.items), explanation: s.reasons, score: s.score };
+    const explanation = [...s.reasons, ...bodyTips(s.items, profile)];
+    return { key: outfitKey(ids), garmentIds: ids, title: titleFor(s.items), explanation, score: s.score };
   });
 }

@@ -92,6 +92,8 @@ fieldset {
   border: 0;
   padding: 0;
   margin: 0 0 14px;
+  /* 中の横スクロールが画面からはみ出さないように */
+  min-width: 0;
 }
 legend {
   font-size: 0.85rem;
@@ -608,6 +610,32 @@ button.thumb {
 }
 .choose .row {
   margin-bottom: 8px;
+}
+
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.size-row .chips.scroll {
+  margin: 0 -16px 0 0;
+  padding: 0 16px 0 0;
+  flex: 1;
+  min-width: 0;
+}
+.size-row-label {
+  flex: none;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 4.5em;
+}
+.size-hint {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+legend.with-icon {
+  display: flex;
 }
 
 /* --- コーデ --- */

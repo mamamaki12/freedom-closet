@@ -1,6 +1,7 @@
 // アプリと中継サーバー（server/）の間でやりとりするデータの形。
 // 両方からこのファイルを読み、形がずれないようにする。
 import { z } from "zod";
+import { FITS } from "../domain/profile";
 import { CATEGORIES, COLOR_NAMES, FORMALITIES, PURPOSES, SEASONS } from "../domain/types";
 
 export const categorySchema = z.enum(CATEGORIES);
@@ -14,8 +15,19 @@ export const garmentInfoSchema = z.object({
   seasons: z.array(z.enum(SEASONS)).max(4),
   formality: z.enum(FORMALITIES),
   warmth: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  size: z.string().max(20).optional(),
   note: z.string().max(200).optional(),
 });
+
+const sizeValue = z.string().max(20).optional();
+export const profileSchema = z
+  .object({
+    heightCm: z.number().min(80).max(230).optional(),
+    weightKg: z.number().min(20).max(250).optional(),
+    fit: z.enum(FITS).optional(),
+    usualSize: z.object({ tops: sizeValue, bottoms: sizeValue, shoes: sizeValue }).partial().optional(),
+  })
+  .optional();
 
 export const feedbackSchema = z.object({
   outfitKey: z.string().max(1000),
@@ -37,6 +49,7 @@ export const outfitsRequestSchema = z.object({
     exclude: z.array(z.string().max(1000)).max(30).optional(),
   }),
   feedback: feedbackListSchema,
+  profile: profileSchema,
 });
 
 export const purchasesRequestSchema = z.object({
@@ -47,6 +60,7 @@ export const purchasesRequestSchema = z.object({
     budgetYen: z.number().int().min(0).max(1_000_000).optional(),
   }),
   feedback: feedbackListSchema,
+  profile: profileSchema,
 });
 
 export const analyzeRequestSchema = z.object({

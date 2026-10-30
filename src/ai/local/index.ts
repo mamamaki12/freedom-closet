@@ -47,7 +47,7 @@ export class LocalAI implements ClosetAI {
   }
 
   async suggestOutfits(input: OutfitInput) {
-    return suggestOutfitsLocal(input.closet, input.request, input.feedback);
+    return suggestOutfitsLocal(input.closet, input.request, input.feedback, input.profile);
   }
 
   async suggestPurchases(input: PurchaseInput) {
