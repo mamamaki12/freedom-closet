@@ -26,6 +26,21 @@ describe("sanitizeOutfits", () => {
     );
     expect(res.map((o) => o.title)).toEqual(["OK"]);
   });
+
+  it("もう見せた組み合わせは落とす", () => {
+    const res = sanitizeOutfits(
+      {
+        outfits: [
+          { garmentIds: ["b1", "t1"], title: "見せた", explanation: [] },
+          { garmentIds: ["t2", "b1"], title: "新しい", explanation: [] },
+        ],
+      },
+      closet,
+      [],
+      ["b1+t1"],
+    );
+    expect(res.map((o) => o.title)).toEqual(["新しい"]);
+  });
 });
 
 describe("ClaudeAI", () => {
@@ -45,6 +60,18 @@ describe("ClaudeAI", () => {
     await expect(
       ai.suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] }),
     ).rejects.toThrow("混み合っています");
+  });
+
+  it("つながらないときは、どうすればよいかを伝える", async () => {
+    const down = vi.fn(async () => {
+      throw new TypeError("Failed to fetch");
+    });
+    const ai = new ClaudeAI("", down as unknown as typeof fetch);
+    await expect(ai.suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] })).rejects.toThrow("端末内AI");
+    const bad = vi.fn(async () => new Response("<html>", { status: 502 }));
+    await expect(
+      new ClaudeAI("", bad as unknown as typeof fetch).suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] }),
+    ).rejects.toThrow("（502）");
   });
 });
 

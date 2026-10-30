@@ -42,9 +42,10 @@ const BASICS: Basic[] = [
 
 const GOOD_SCORE = 1.5;
 
-function countGoodCombos(closet: GarmentInfo[], fb: ReturnType<typeof indexFeedback>): number {
-  return buildCombos(closet).filter((c) => scoreCombo(c.items, { mustInclude: [], purpose: "everyday" }, fb).score >= GOOD_SCORE)
-    .length;
+function goodCombos(closet: GarmentInfo[], fb: ReturnType<typeof indexFeedback>, required?: GarmentInfo) {
+  return buildCombos(closet, undefined, required).filter(
+    (c) => scoreCombo(c.items, { mustInclude: [], purpose: "everyday" }, fb).score >= GOOD_SCORE,
+  );
 }
 
 export function suggestPurchasesLocal(
@@ -53,7 +54,8 @@ export function suggestPurchasesLocal(
   feedback: Feedback[],
 ): PurchaseSuggestion[] {
   const fb = indexFeedback(feedback);
-  const before = countGoodCombos(closet, fb);
+  const before = goodCombos(closet, fb).length;
+  const hasShoes = closet.some((g) => g.category === "shoes");
   const results: (PurchaseSuggestion & { rank: number })[] = [];
 
   for (const basic of BASICS) {
@@ -65,23 +67,24 @@ export function suggestPurchasesLocal(
       if (duplicate) continue;
 
       const virtual: GarmentInfo = { id: "__new__", ...basic, color };
-      const withNew = [...closet, virtual];
-      const after = countGoodCombos(withNew, fb);
-      const gained = after - before;
+      // 足しても今の組み合わせは減らないので、新しい服を含む組み合わせだけ数えれば増えた数になる。
+      // ただし初めての靴は、靴なしの組み合わせを置きかえるので、その分を引く
+      const withNewCombos = goodCombos([...closet, virtual], fb, virtual);
+      const gained = withNewCombos.length - (basic.category === "shoes" && !hasShoes ? before : 0);
       if (gained <= 0) continue;
 
-      const matches = buildCombos(withNew)
-        .filter((c) => c.items.some((g) => g.id === "__new__"))
-        .filter((c) => scoreCombo(c.items, { mustInclude: [], purpose: "everyday" }, fb).score >= GOOD_SCORE)
+      const matches = withNewCombos
         .flatMap((c) => c.items.filter((g) => g.id !== "__new__" && g.category !== "shoes").map((g) => g.id));
       const matchesWith = [...new Set(matches)];
 
       const name = `${colorLabel(color)}の${basic.subType}`;
       const sameCategory = closet.filter((g) => g.category === basic.category).length;
+      // 服が多いと「591通り」のような実感のない数になるので、大きい数はまるめる
+      const more = gained >= 100 ? "100通り以上" : `${gained}通り`;
       const reason =
         sameCategory === 0
-          ? `${name}があると、まだ持っていない種類が埋まり、コーデが${gained}通り増えます。`
-          : `手持ちの服${matchesWith.length}着と合わせられ、コーデが${gained}通り増えます。`;
+          ? `${name}があると、まだ持っていない種類が埋まり、コーデが${more}増えます。`
+          : `手持ちの服${matchesWith.length}着と合わせられ、コーデが${more}増えます。`;
 
       results.push({
         category: basic.category,

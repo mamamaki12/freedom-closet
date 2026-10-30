@@ -22,13 +22,37 @@ describe("buildCombos", () => {
   });
 });
 
+describe("buildCombos（服を指定）", () => {
+  it("指定した服を含む組み合わせだけを、全部作ったときと同じだけ作る", () => {
+    for (const item of closet) {
+      const all = buildCombos(closet, 17).filter((c) => c.items.some((x) => x.id === item.id));
+      expect(buildCombos(closet, 17, item)).toHaveLength(all.length);
+    }
+  });
+});
+
 describe("suggestOutfitsLocal", () => {
+  it("靴が2足以上あれば、3案とも同じ靴にはしない", () => {
+    const withShoes = [...closet, g({ id: "s2", category: "shoes", color: "black", subType: "革靴" })];
+    const res = suggestOutfitsLocal(withShoes, { mustInclude: [], purpose: "everyday", temperatureC: 22 }, []);
+    const shoes = res.map((o) => o.garmentIds.find((id) => id.startsWith("s")));
+    expect(new Set(shoes).size).toBeGreaterThan(1);
+  });
+
   it("最大3案で、使いたい服が必ず入る", () => {
     const res = suggestOutfitsLocal(closet, { mustInclude: ["t3"], purpose: "everyday", temperatureC: 5 }, []);
     expect(res.length).toBeGreaterThan(0);
     expect(res.length).toBeLessThanOrEqual(3);
     expect(res.every((o) => o.garmentIds.includes("t3"))).toBe(true);
     expect(res.every((o) => o.explanation.length > 0)).toBe(true);
+  });
+
+  it("「ほかの案」では、もう見せた組み合わせを出さない", () => {
+    const first = suggestOutfitsLocal(closet, { mustInclude: [], purpose: "everyday", temperatureC: 22 }, []);
+    const shown = first.map((o) => o.key);
+    const next = suggestOutfitsLocal(closet, { mustInclude: [], purpose: "everyday", temperatureC: 22, exclude: shown }, []);
+    expect(next.length).toBeGreaterThan(0);
+    expect(next.some((o) => shown.includes(o.key))).toBe(false);
   });
 
   it("夏は夏服を上位にする", () => {

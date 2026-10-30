@@ -23,6 +23,8 @@ export class ClaudeAIError extends Error {
 
 type Fetch = typeof fetch;
 
+const UNREACHABLE = "Claudeにつながりませんでした。少しあとでもう一度試すか、設定で「端末内AI」に切り替えてください";
+
 export class ClaudeAI implements ClosetAI {
   readonly id = "claude" as const;
   readonly label = "Claude API";
@@ -40,10 +42,13 @@ export class ClaudeAI implements ClosetAI {
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
       signal,
+    }).catch((e: unknown) => {
+      if (signal?.aborted) throw e;
+      throw new ClaudeAIError(`${UNREACHABLE}（通信エラー）`, 0);
     });
     if (!res.ok) {
       const detail = await res.json().catch(() => ({}) as { error?: string });
-      throw new ClaudeAIError((detail as { error?: string }).error ?? `サーバーエラー（${res.status}）`, res.status);
+      throw new ClaudeAIError((detail as { error?: string }).error ?? `${UNREACHABLE}（${res.status}）`, res.status);
     }
     return parse(await res.json());
   }
@@ -57,18 +62,24 @@ export class ClaudeAI implements ClosetAI {
       (v) => analyzeResultSchema.parse(v),
       options?.signal,
     );
+    const confidence = Math.max(0, Math.min(1, r.confidence));
     return {
       category: r.category,
       subType: r.subType,
       color: r.color,
-      confidence: Math.max(0, Math.min(1, r.confidence)),
-      candidates: [{ category: r.category, subType: r.subType, score: r.confidence }],
+      pattern: r.pattern,
+      subColor: r.subColor ?? undefined,
+      confidence,
+      candidates: [
+        { category: r.category, subType: r.subType, score: confidence },
+        ...r.alternatives.map((a) => ({ ...a, score: (1 - confidence) / Math.max(1, r.alternatives.length) })),
+      ],
     };
   }
 
   async suggestOutfits(input: OutfitInput, options?: { signal?: AbortSignal }): Promise<Outfit[]> {
     const r: OutfitsResult = await this.post("outfits", input, (v) => outfitsResultSchema.parse(v), options?.signal);
-    return sanitizeOutfits(r, input.closet, input.request.mustInclude);
+    return sanitizeOutfits(r, input.closet, input.request.mustInclude, input.request.exclude);
   }
 
   async suggestPurchases(input: PurchaseInput, options?: { signal?: AbortSignal }): Promise<PurchaseSuggestion[]> {
@@ -81,11 +92,11 @@ export class ClaudeAI implements ClosetAI {
   }
 }
 
-/** 持っていない服や同じ種類の重複を含む案、使いたい服が入っていない案を落とす */
-export function sanitizeOutfits(r: OutfitsResult, closet: GarmentInfo[], mustInclude: string[]): Outfit[] {
+/** 持っていない服や同じ種類の重複を含む案、使いたい服が入っていない案、もう見せた案を落とす */
+export function sanitizeOutfits(r: OutfitsResult, closet: GarmentInfo[], mustInclude: string[], exclude: string[] = []): Outfit[] {
   const byId = new Map(closet.map((g) => [g.id, g]));
   const out: Outfit[] = [];
-  const seen = new Set<string>();
+  const seen = new Set<string>(exclude);
   r.outfits.forEach((o, i) => {
     const ids = [...new Set(o.garmentIds)];
     if (ids.length === 0 || !ids.every((id) => byId.has(id))) return;

@@ -1,21 +1,36 @@
 // アプリと中継サーバー（server/）の間でやりとりするデータの形。
 // 両方からこのファイルを読み、形がずれないようにする。
 import { z } from "zod";
-import { CATEGORIES, COLOR_NAMES, FORMALITIES, PURPOSES, SEASONS } from "../domain/types";
+import { FITS } from "../domain/profile";
+import { CATEGORIES, COLOR_NAMES, FORMALITIES, PATTERNS, PURPOSES, SEASONS } from "../domain/types";
 
 export const categorySchema = z.enum(CATEGORIES);
 export const colorSchema = z.enum(COLOR_NAMES);
+export const patternSchema = z.enum(PATTERNS);
 
 export const garmentInfoSchema = z.object({
   id: z.string().min(1).max(64),
   category: categorySchema,
   subType: z.string().max(40),
   color: colorSchema,
+  pattern: patternSchema.optional(),
+  subColor: colorSchema.optional(),
   seasons: z.array(z.enum(SEASONS)).max(4),
   formality: z.enum(FORMALITIES),
   warmth: z.union([z.literal(1), z.literal(2), z.literal(3)]),
+  size: z.string().max(20).optional(),
   note: z.string().max(200).optional(),
 });
+
+const sizeValue = z.string().max(20).optional();
+export const profileSchema = z
+  .object({
+    heightCm: z.number().min(80).max(230).optional(),
+    weightKg: z.number().min(20).max(250).optional(),
+    fit: z.enum(FITS).optional(),
+    usualSize: z.object({ tops: sizeValue, bottoms: sizeValue, shoes: sizeValue }).partial().optional(),
+  })
+  .optional();
 
 export const feedbackSchema = z.object({
   outfitKey: z.string().max(1000),
@@ -34,8 +49,11 @@ export const outfitsRequestSchema = z.object({
     temperatureC: z.number().min(-30).max(50).optional(),
     purpose: z.enum(PURPOSES),
     preference: z.string().max(300).optional(),
+    exclude: z.array(z.string().max(1000)).max(30).optional(),
+    recentlyWorn: z.array(z.object({ garmentIds: z.array(z.string().max(64)).max(10), day: z.string().max(10) })).max(7).optional(),
   }),
   feedback: feedbackListSchema,
+  profile: profileSchema,
 });
 
 export const purchasesRequestSchema = z.object({
@@ -46,6 +64,7 @@ export const purchasesRequestSchema = z.object({
     budgetYen: z.number().int().min(0).max(1_000_000).optional(),
   }),
   feedback: feedbackListSchema,
+  profile: profileSchema,
 });
 
 export const analyzeRequestSchema = z.object({
@@ -59,8 +78,14 @@ export const analyzeRequestSchema = z.object({
 export const analyzeResultSchema = z.object({
   category: categorySchema,
   subType: z.string().describe("服の種類を日本語で短く。例：Tシャツ、シャツ、ワイドパンツ"),
-  color: colorSchema,
-  confidence: z.number().describe("0〜1。写真から判断しにくいときは低く"),
+  color: colorSchema.describe("いちばん面積の大きい色。柄ものなら地の色"),
+  pattern: patternSchema.describe("無地なら solid。ボーダー・ストライプは stripe、チェックは check、花柄は floral、ドットは dot、それ以外の柄・大きなプリント・色の切り替えは print"),
+  subColor: colorSchema.nullable().describe("2番目に目立つ色（柄の色・切り替えの色）。無地なら null"),
+  alternatives: z
+    .array(z.object({ category: categorySchema, subType: z.string() }))
+    .max(2)
+    .describe("迷ったときの別の候補（なければ空）。例：シャツかブラウスか迷ったらもう一方を入れる"),
+  confidence: z.number().describe("0〜1。種類と色の両方に自信があれば 0.9 以上、どちらかに迷いがあれば 0.6 以下にする"),
 });
 
 export const outfitsResultSchema = z.object({
@@ -90,3 +115,33 @@ export const purchasesResultSchema = z.object({
 export type AnalyzeResult = z.infer<typeof analyzeResultSchema>;
 export type OutfitsResult = z.infer<typeof outfitsResultSchema>;
 export type PurchasesResult = z.infer<typeof purchasesResultSchema>;
+
+// ---- 似た着こなしの写真（写真サイトの検索。Claudeは使わない）----
+export const lookPhotosRequestSchema = z.object({
+  items: z
+    .array(z.object({ category: categorySchema, color: colorSchema, subType: z.string().max(40) }))
+    .min(1)
+    .max(6),
+  fit: z.enum(FITS).optional(),
+});
+
+export const lookPhotoSchema = z.object({
+  id: z.string(),
+  /** 一覧に出す縦長の小さい画像 */
+  image: z.string().url(),
+  alt: z.string(),
+  /** 写真サイトの、その写真のページ */
+  pageUrl: z.string().url(),
+  photographer: z.string(),
+  photographerUrl: z.string().url(),
+});
+
+export const lookPhotosResultSchema = z.object({
+  query: z.string(),
+  photos: z.array(lookPhotoSchema),
+  source: z.object({ name: z.string(), url: z.string().url() }),
+});
+
+export type LookPhotosRequest = z.infer<typeof lookPhotosRequestSchema>;
+export type LookPhoto = z.infer<typeof lookPhotoSchema>;
+export type LookPhotosResult = z.infer<typeof lookPhotosResultSchema>;
