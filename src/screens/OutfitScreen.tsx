@@ -9,7 +9,8 @@ import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
 import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose, type WearRecord } from "../domain/types";
 import { dayKey, recentWears } from "../domain/wear";
 import { LookPhotos, OutfitLook } from "./OutfitLook";
-import { FEELS, loadConditions, saveConditions, temperatureFor, type Feel } from "../storage/conditions";
+import { FEELS, feelForTemperature, loadConditions, saveConditions, temperatureFor, type Feel } from "../storage/conditions";
+import { WeatherButton } from "../weather/WeatherButton";
 
 /** トップスとボトムス、またはワンピースがあれば組める */
 export function canSuggestOutfits(garments: Garment[]): boolean {
@@ -149,6 +150,7 @@ export function OutfitScreen({
             </button>
           ))}
         </div>
+        <WeatherButton onTemperature={(c) => chooseFeel(feelForTemperature(c))} />
         <div className="chips scroll" role="group" aria-label="出かける目的">
           {PURPOSES.map((p) => (
             <button key={p} type="button" className={`chip${purpose === p ? " on" : ""}`} aria-pressed={purpose === p} onClick={() => choosePurpose(p)}>

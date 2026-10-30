@@ -29,6 +29,20 @@ export function feelForMonth(now: Date): Feel {
   return FEEL_BY_MONTH[now.getMonth()];
 }
 
+/** 気温（℃）からいちばん近い体感を選ぶ */
+export function feelForTemperature(c: number): Feel {
+  let best: Feel = FEELS[0].id;
+  let gap = Infinity;
+  for (const f of FEELS) {
+    const d = Math.abs(f.temperatureC - c);
+    if (d < gap) {
+      gap = d;
+      best = f.id;
+    }
+  }
+  return best;
+}
+
 export function temperatureFor(feel: Feel): number {
   return FEELS.find((f) => f.id === feel)!.temperatureC;
 }

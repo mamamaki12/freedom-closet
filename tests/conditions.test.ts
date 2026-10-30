@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { feelForMonth, loadConditions, saveConditions, temperatureFor } from "../src/storage/conditions";
+import { feelForMonth, feelForTemperature, loadConditions, saveConditions, temperatureFor } from "../src/storage/conditions";
 import { climateFor } from "../src/ai/local/outfits";
 
 describe("体感の気温", () => {
@@ -36,5 +36,15 @@ describe("条件の保存", () => {
     saveConditions({ feel: "hot", purpose: "work" }, day);
     expect(loadConditions(new Date(2026, 9, 25, 20))).toEqual({ feel: "hot", purpose: "work" });
     expect(loadConditions(new Date(2026, 9, 26, 8))).toEqual({ feel: "mild", purpose: "work" });
+  });
+});
+
+describe("feelForTemperature", () => {
+  it("気温からいちばん近い体感を選ぶ", () => {
+    expect(feelForTemperature(3)).toBe("cold");
+    expect(feelForTemperature(13)).toBe("chilly");
+    expect(feelForTemperature(18)).toBe("mild");
+    expect(feelForTemperature(23)).toBe("warm");
+    expect(feelForTemperature(31)).toBe("hot");
   });
 });

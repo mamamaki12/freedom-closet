@@ -1018,3 +1018,13 @@ legend.with-icon {
 .table td:first-child {
   text-align: left;
 }
+.weather {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 8px;
+}
+.weather a {
+  color: inherit;
+}
