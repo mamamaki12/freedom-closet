@@ -32,8 +32,10 @@ function loft(stations: Station[], opts: { power?: number; capStart?: boolean; c
     const prev = stations[Math.max(0, i - 1)].c;
     const next = stations[Math.min(n - 1, i + 1)].c;
     const d = new THREE.Vector3(next[0] - prev[0], next[1] - prev[1], next[2] - prev[2]).normalize();
-    // 輪の横向き(n1)と前向き(n2)。前向きはなるべく +z にそろえる
-    let n1 = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 0, 1));
+    // 輪の横向き(n1)と前向き(n2)。前向きはなるべく +z にそろえる。
+    // 足のように横に寝た筒では +z と平行になって決められないので、上向きを基準にする
+    const ref = Math.abs(d.y) > 0.6 ? new THREE.Vector3(0, 0, 1) : new THREE.Vector3(0, 1, 0);
+    let n1 = new THREE.Vector3().crossVectors(d, ref);
     if (n1.lengthSq() < 1e-6) n1 = new THREE.Vector3(1, 0, 0);
     n1.normalize();
     if (n1.x < 0) n1.negate();
@@ -47,26 +49,44 @@ function loft(stations: Station[], opts: { power?: number; capStart?: boolean; c
       uv.push(j / SEG, n > 1 ? i / (n - 1) : 0);
     }
   }
+  // 面が外側を向くようにそろえる（輪の向きの決め方によって裏返ることがあり、裏返ると片面しか描かない体が透けて見える）
+  let flipAll = false;
+  if (n > 1) {
+    const m = Math.floor((n - 1) / 2);
+    const P = (i: number, j: number) => new THREE.Vector3().fromArray(pos, (i * (SEG + 1) + j) * 3);
+    const p0 = P(m, 0);
+    const normal = new THREE.Vector3().crossVectors(P(m, 1).sub(p0), P(m + 1, 0).sub(p0));
+    const outward = p0.clone().sub(new THREE.Vector3(...stations[m].c));
+    flipAll = normal.dot(outward) < 0;
+  }
   for (let i = 0; i < n - 1; i++) {
     for (let j = 0; j < SEG; j++) {
       const a = i * (SEG + 1) + j;
       const b = a + SEG + 1;
-      idx.push(a, a + 1, b, a + 1, b + 1, b);
+      if (flipAll) idx.push(a, b, a + 1, a + 1, b, b + 1);
+      else idx.push(a, a + 1, b, a + 1, b + 1, b);
     }
   }
-  const cap = (i: number, flip: boolean) => {
+  // ふた（輪を中心からの三角形でふさぐ）。面が外側（筒の先）を向くように、向きを計算して決める
+  const cap = (i: number, end: boolean) => {
     const s = stations[i];
     const center = pos.length / 3;
     pos.push(...s.c);
-    uv.push(0.5, i === 0 ? 0 : 1);
+    uv.push(0.5, end ? 1 : 0);
+    const c = new THREE.Vector3(...s.c);
+    const other = new THREE.Vector3(...stations[end ? i - 1 : i + 1].c);
+    const outward = c.clone().sub(other);
+    const P = (j: number) => new THREE.Vector3().fromArray(pos, (i * (SEG + 1) + j) * 3);
+    const normal = new THREE.Vector3().crossVectors(P(0).sub(c), P(1).sub(c));
+    const flip = normal.dot(outward) < 0;
     for (let j = 0; j < SEG; j++) {
       const a = i * (SEG + 1) + j;
       if (flip) idx.push(center, a + 1, a);
       else idx.push(center, a, a + 1);
     }
   };
-  if (opts.capStart) cap(0, false);
-  if (opts.capEnd) cap(n - 1, true);
+  if (opts.capStart && n > 1) cap(0, false);
+  if (opts.capEnd && n > 1) cap(n - 1, true);
   const g = new THREE.BufferGeometry();
   g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   g.setAttribute("uv", new THREE.Float32BufferAttribute(uv, 2));
@@ -180,17 +200,48 @@ function legStations(scan: BodyScan, side: 1 | -1, from: number, to: number, inf
   return out;
 }
 
-function footStations(scan: BodyScan, side: 1 | -1, inflate: number, height = 1): Station[] {
-  const x = (side * scan.legGap) / 2;
+/** 足の長さ（身長の約15%）と、前後の位置（足首の真下が z=0） */
+const FOOT_LENGTH = 0.15;
+const HEEL_Z = -0.045;
+
+/**
+ * 足（靴）の形。かかとは丸く、甲はつま先に向かって低くなり、つま先は丸くすぼまる。
+ * height は足首までの高さの倍率（ブーツで高く、革靴で低く）、lift は靴底の厚み。足は少し外向きにする。
+ */
+function footStations(scan: BodyScan, side: 1 | -1, inflate: number, height = 1, lift = 0): Station[] {
   const ankle = scan.legs[scan.legs.length - 1];
-  const w = ankle.width * 1.25;
-  const h = Y(scan.ankleY);
-  return [
-    { c: [x, h * 0.5 * height + 0.004, -0.03], rx: w * 0.4 + inflate, rz: h * 0.4 * height + inflate },
-    { c: [x, h * 0.45 * height + 0.004, 0.0], rx: w * 0.5 + inflate, rz: h * 0.45 * height + inflate },
-    { c: [x * 1.02, h * 0.3 * height + 0.004, 0.06], rx: w * 0.55 + inflate, rz: h * 0.3 * height + inflate },
-    { c: [x * 1.04, h * 0.18 + 0.004, 0.11], rx: w * 0.42 + inflate, rz: h * 0.18 + inflate },
+  const w = ankle.width * 1.3;
+  const h = Y(scan.ankleY) * height;
+  // かかと → 足首の下 → 甲 → つま先。[前後の位置(0〜1)、高さの中心、幅、高さ] は足の高さ・幅に対する割合
+  const profile: [number, number, number, number][] = [
+    [0, 0.55, 0.22, 0.3],
+    [0.07, 0.52, 0.42, 0.48],
+    [0.2, 0.5, 0.5, 0.5],
+    [0.36, 0.47, 0.53, 0.47],
+    [0.52, 0.4, 0.56, 0.4],
+    [0.68, 0.32, 0.56, 0.32],
+    [0.81, 0.25, 0.52, 0.25],
+    [0.9, 0.2, 0.44, 0.2],
+    [0.96, 0.16, 0.3, 0.14],
+    [1, 0.14, 0.15, 0.08],
   ];
+  return profile.map(([t, yc, rw, rh]) => ({ c: footPoint(scan, side, t, h * yc + lift + 0.003), rx: w * rw + inflate, rz: h * rh + inflate }));
+}
+
+/** 足の中心線上の点。t=0 がかかと、1 がつま先。足は約8°外向き */
+function footPoint(scan: BodyScan, side: 1 | -1, t: number, y: number): V3 {
+  const x = (side * scan.legGap) / 2;
+  const z = HEEL_Z + t * FOOT_LENGTH;
+  const ang = side * 0.14;
+  return [x + z * Math.sin(ang), y, z * Math.cos(ang)];
+}
+
+/** 靴底：足の形に沿った平たい板 */
+function soleStations(scan: BodyScan, side: 1 | -1, thick: number): Station[] {
+  const ankle = scan.legs[scan.legs.length - 1];
+  const w = ankle.width * 1.3;
+  const widths = [0.25, 0.46, 0.54, 0.57, 0.6, 0.6, 0.56, 0.48, 0.34, 0.18];
+  return widths.map((rw, i) => ({ c: footPoint(scan, side, i / (widths.length - 1), thick / 2 + 0.002), rx: w * rw + 0.004, rz: thick / 2 }));
 }
 
 /** 服や体の材質 */
@@ -313,10 +364,16 @@ export function buildGarment(scan: BodyScan, shape: LookShape, paint: Paint): TH
       break;
     }
     case "shoes": {
-      const mat = material(paint, "whole");
+      // 革靴は低め、ブーツは足首の上まで。靴底はスニーカーが厚く、革靴・サンダルは薄い
+      const height = shape.style === "boots" ? 1.1 : shape.style === "leather" ? 0.8 : shape.style === "sandals" ? 0.5 : 1;
+      const sole = shape.style === "sneakers" ? 0.012 : shape.style === "boots" ? 0.01 : 0.006;
+      // 靴の写真をそのまま巻くと写真の背景まで貼られるので、生地の模様だけを敷き詰める
+      const upper = material(paint, "swatch", [2, 2]);
+      const soleMat = new THREE.MeshStandardMaterial({ color: new THREE.Color(paint.color).multiplyScalar(0.45), roughness: 0.9, metalness: 0 });
       for (const side of [-1, 1] as const) {
-        add(loft(footStations(scan, side, 0.006, shape.style === "boots" ? 1.1 : 1), { capStart: true, capEnd: true }), mat);
-        if (shape.style === "boots") add(loft(legStations(scan, side, 0.62, 1, () => 0.007)), mat);
+        add(loft(footStations(scan, side, 0.005, height, sole), { capStart: true, capEnd: true }), upper);
+        add(loft(soleStations(scan, side, sole), { power: 2.6, capStart: true, capEnd: true }), soleMat);
+        if (shape.style === "boots") add(loft(legStations(scan, side, 0.62, 1, () => 0.007)), upper);
       }
       break;
     }
