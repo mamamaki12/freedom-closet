@@ -2,8 +2,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
 import type { Feedback, Garment } from "./domain/types";
+import { AddGarments } from "./screens/AddGarments";
 import { ClosetScreen } from "./screens/ClosetScreen";
-import { GarmentForm } from "./screens/GarmentForm";
+import { EditGarment } from "./screens/EditGarment";
 import { OutfitScreen } from "./screens/OutfitScreen";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
@@ -18,11 +19,16 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "settings", label: "設定" },
 ];
 
+/** タブの上にかぶせて開く画面 */
+type Sheet = { kind: "add"; files?: File[] } | { kind: "edit"; garment: Garment } | null;
+
 export function App() {
   const [tab, setTab] = useState<Tab>("closet");
   const [garments, setGarments] = useState<Garment[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
-  const [editing, setEditing] = useState<Garment | "new" | null>(null);
+  const [sheet, setSheet] = useState<Sheet>(null);
+  /** 「この服でコーデ」で選んだ服。変わるたびにコーデ画面を作り直す */
+  const [styleWith, setStyleWith] = useState<{ ids: string[]; n: number }>({ ids: [], n: 0 });
   const [settings, setSettings] = useState<AISettings>(loadAISettings);
   const [notice, setNotice] = useState<string>();
 
@@ -58,32 +64,54 @@ export function App() {
       )}
 
       <main>
-        {editing ? (
-          <GarmentForm
-            key={editing === "new" ? "new" : editing.id}
+        {sheet?.kind === "add" ? (
+          <AddGarments
             ai={ai}
-            initial={editing === "new" ? undefined : editing}
-            onCancel={() => setEditing(null)}
+            initialFiles={sheet.files}
             onSave={async (g) => {
               await db.saveGarment(g);
               await reload();
-              setEditing(null);
             }}
-            onDelete={
-              editing === "new"
-                ? undefined
-                : async () => {
-                    await db.deleteGarment(editing.id);
-                    await reload();
-                    setEditing(null);
-                  }
-            }
+            onEdit={(garment) => setSheet({ kind: "edit", garment })}
+            onDone={(saved) => {
+              setSheet(null);
+              setTab("closet");
+              if (saved > 0) setNotice(`${saved}着を登録しました`);
+            }}
+          />
+        ) : sheet?.kind === "edit" ? (
+          <EditGarment
+            key={sheet.garment.id}
+            garment={sheet.garment}
+            onClose={() => setSheet(null)}
+            onSave={async (g) => {
+              await db.saveGarment(g);
+              await reload();
+              setSheet(null);
+            }}
+            onDelete={async () => {
+              await db.deleteGarment(sheet.garment.id);
+              await reload();
+              setSheet(null);
+            }}
+            onStyle={() => {
+              setStyleWith((cur) => ({ ids: [sheet.garment.id], n: cur.n + 1 }));
+              setSheet(null);
+              setTab("outfit");
+            }}
           />
         ) : tab === "closet" ? (
-          <ClosetScreen garments={garments} onAdd={() => setEditing("new")} onEdit={setEditing} />
+          <ClosetScreen
+            garments={garments}
+            onAdd={(files) => setSheet({ kind: "add", files })}
+            onEdit={(garment) => setSheet({ kind: "edit", garment })}
+          />
         ) : tab === "outfit" ? (
           <OutfitScreen
+            key={styleWith.n}
             ai={ai}
+            initialMustInclude={styleWith.ids}
+            onGoCloset={() => setTab("closet")}
             garments={garments}
             feedback={feedback}
             onFeedback={async (f) => {
@@ -111,9 +139,9 @@ export function App() {
         {TABS.map((t) => (
           <button
             key={t.id}
-            className={tab === t.id && !editing ? "on" : ""}
+            className={tab === t.id && !sheet ? "on" : ""}
             onClick={() => {
-              setEditing(null);
+              setSheet(null);
               setTab(t.id);
             }}
           >

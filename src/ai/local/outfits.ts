@@ -166,7 +166,7 @@ export function stylingTips(items: GarmentInfo[]): string[] {
     tips.push(`細身のボトムスなので、${top.subType || "トップス"}は外に出してゆるさを足すと今っぽく見えます。`);
   }
   // 「Tシャツ」は袖をまくる対象にしない
-  const shirt = /(?<![TＴ])シャツ|ブラウス/;
+  const shirt = /(?<![TＴロ])シャツ|ブラウス/;
   if (has(top, shirt) && outer) {
     tips.push("アウターの袖を少しまくって、シャツの袖口をのぞかせると軽く見えます。");
   } else if (has(top, shirt)) {
@@ -214,9 +214,13 @@ export function pickDiverse(scored: ScoredCombo[], n: number): ScoredCombo[] {
 
 export function suggestOutfitsLocal(closet: GarmentInfo[], request: OutfitRequest, feedback: Feedback[]): Outfit[] {
   const fb = indexFeedback(feedback);
+  const shown = new Set(request.exclude ?? []);
   const combos = buildCombos(closet, request.temperatureC)
     .filter((c) => request.mustInclude.every((id) => c.items.some((g) => g.id === id)))
-    .filter((c) => !fb.dislikedOutfits.has(outfitKey(c.items.map((g) => g.id))));
+    .filter((c) => {
+      const key = outfitKey(c.items.map((g) => g.id));
+      return !fb.dislikedOutfits.has(key) && !shown.has(key);
+    });
 
   const scored = combos.map((c) => scoreCombo(c.items, request, fb));
   return pickDiverse(scored, MAX_OUTFITS).map((s) => {

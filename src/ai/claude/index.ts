@@ -68,7 +68,7 @@ export class ClaudeAI implements ClosetAI {
 
   async suggestOutfits(input: OutfitInput, options?: { signal?: AbortSignal }): Promise<Outfit[]> {
     const r: OutfitsResult = await this.post("outfits", input, (v) => outfitsResultSchema.parse(v), options?.signal);
-    return sanitizeOutfits(r, input.closet, input.request.mustInclude);
+    return sanitizeOutfits(r, input.closet, input.request.mustInclude, input.request.exclude);
   }
 
   async suggestPurchases(input: PurchaseInput, options?: { signal?: AbortSignal }): Promise<PurchaseSuggestion[]> {
@@ -81,11 +81,11 @@ export class ClaudeAI implements ClosetAI {
   }
 }
 
-/** 持っていない服や同じ種類の重複を含む案、使いたい服が入っていない案を落とす */
-export function sanitizeOutfits(r: OutfitsResult, closet: GarmentInfo[], mustInclude: string[]): Outfit[] {
+/** 持っていない服や同じ種類の重複を含む案、使いたい服が入っていない案、もう見せた案を落とす */
+export function sanitizeOutfits(r: OutfitsResult, closet: GarmentInfo[], mustInclude: string[], exclude: string[] = []): Outfit[] {
   const byId = new Map(closet.map((g) => [g.id, g]));
   const out: Outfit[] = [];
-  const seen = new Set<string>();
+  const seen = new Set<string>(exclude);
   r.outfits.forEach((o, i) => {
     const ids = [...new Set(o.garmentIds)];
     if (ids.length === 0 || !ids.every((id) => byId.has(id))) return;

@@ -79,6 +79,7 @@ ${JSON.stringify(closet)}
 - 気温：${request.temperatureC ?? "指定なし"}℃
 - 目的：${PURPOSE_LABELS[request.purpose]}
 - 好み：${request.preference ?? "指定なし"}
+- もう見せた組み合わせ（服IDを+でつないだもの。これとは違う案にする）：${request.exclude?.length ? request.exclude.join(" / ") : "なし"}
 
 これまでの評価（liked=true が好き、false が好みじゃない）：
 ${JSON.stringify(feedback.map((f) => ({ garmentIds: f.garmentIds, liked: f.liked })))}

@@ -34,6 +34,7 @@ export const outfitsRequestSchema = z.object({
     temperatureC: z.number().min(-30).max(50).optional(),
     purpose: z.enum(PURPOSES),
     preference: z.string().max(300).optional(),
+    exclude: z.array(z.string().max(1000)).max(30).optional(),
   }),
   feedback: feedbackListSchema,
 });
