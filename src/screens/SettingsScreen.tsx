@@ -5,6 +5,7 @@ import { ICON } from "../components/icons";
 import type { BodyScan } from "../body/types";
 import type { Profile } from "../domain/profile";
 import { BodyModelPanel } from "./BodyModelPanel";
+import { AccuracyPanel } from "./AccuracyPanel";
 import { ProfilePanel } from "./ProfilePanel";
 
 export function SettingsScreen({
@@ -81,6 +82,7 @@ export function SettingsScreen({
           <span>Claudeにつながらないときは端末内AIで続ける</span>
         </label>
       )}
+      <AccuracyPanel />
       {children}
     </section>
   );

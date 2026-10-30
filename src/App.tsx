@@ -15,6 +15,7 @@ import { OutfitScreen } from "./screens/OutfitScreen";
 import { BackupPanel } from "./screens/BackupPanel";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
+import { addRecord, updateFinal } from "./storage/analysisLog";
 import * as db from "./storage/db";
 import { loadBodyScan, saveBodyScan } from "./storage/bodyScan";
 import { loadProfile, saveProfile } from "./storage/profile";
@@ -94,8 +95,24 @@ export function App() {
             ai={ai}
             profile={profile}
             initialFiles={sheet.files}
-            onSave={async (g) => {
+            onSave={async (g, analysis) => {
               await db.saveGarment(g);
+              if (analysis) {
+                // 判定の記録（検証用）。記録に失敗しても登録は続ける
+                await addRecord({
+                  id: g.id,
+                  at: Date.now(),
+                  provider: ai.id,
+                  elapsedMs: analysis.elapsedMs,
+                  predicted: {
+                    category: analysis.result.category,
+                    subType: analysis.result.subType,
+                    color: analysis.result.color,
+                    confidence: analysis.result.confidence,
+                  },
+                  final: { category: g.category, subType: g.subType, color: g.color },
+                }).catch(() => undefined);
+              }
               await reload();
             }}
             onEdit={(garment) => setSheet({ kind: "edit", garment })}
@@ -112,6 +129,8 @@ export function App() {
             onClose={() => setSheet(null)}
             onSave={async (g) => {
               await db.saveGarment(g);
+              // 直した値を判定の記録に反映する（検証用）
+              await updateFinal(g.id, { category: g.category, subType: g.subType, color: g.color }).catch(() => undefined);
               await reload();
               setSheet(null);
             }}
