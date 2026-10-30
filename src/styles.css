@@ -92,6 +92,8 @@ fieldset {
   border: 0;
   padding: 0;
   margin: 0 0 14px;
+  /* 中の横スクロールが画面からはみ出さないように */
+  min-width: 0;
 }
 legend {
   font-size: 0.85rem;
@@ -150,10 +152,12 @@ select.text {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 4px 12px;
+  min-height: 36px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
 .chip.on {
   background: var(--accent);
@@ -163,6 +167,26 @@ select.text {
 .chips.small .chip {
   font-size: 0.75rem;
   padding: 2px 10px;
+  min-height: 28px;
+}
+.chips.big .chip {
+  font-size: 0.95rem;
+  min-height: 44px;
+  padding: 6px 16px;
+}
+/* 横にスクロールする1行のチップ（スマホで折り返さず、指でずらす） */
+.chips.scroll {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px 8px;
+  padding: 0 16px;
+}
+.chips.scroll::-webkit-scrollbar {
+  display: none;
+}
+.chips.scroll .chip {
+  flex: none;
 }
 
 .color-dot {
@@ -182,11 +206,65 @@ select.text {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 8px 14px;
+  min-height: 44px;
   cursor: pointer;
   text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.btn {
+  gap: 6px;
+}
+.btn svg,
+.chip svg,
+.more summary svg {
+  flex: none;
+}
+/* アイコンだけのボタン（好き・削除・もどる など） */
+.btn.icon-only {
+  min-width: 44px;
+  padding: 8px;
+}
+.btn.like.on {
+  color: #d6336c;
+  border-color: #d6336c;
+}
+.btn.dislike.on {
+  color: var(--text);
+  border-color: var(--text);
+}
+.btn.small {
+  font-size: 0.8rem;
+  min-height: 36px;
+  padding: 4px 8px;
+}
+.icon-btn {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 4px;
+  min-width: 36px;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 .btn.primary {
   background: var(--accent);
@@ -227,7 +305,7 @@ select.text {
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 8px;
 }
 .grid.small {
@@ -269,26 +347,6 @@ button.thumb {
   text-overflow: ellipsis;
 }
 
-.photo-picker {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  aspect-ratio: 4 / 3;
-  border: 2px dashed var(--line);
-  border-radius: var(--radius);
-  overflow: hidden;
-  cursor: pointer;
-  color: var(--muted);
-}
-.photo-picker img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-.photo-picker input {
-  display: none;
-}
-
 .hint,
 .empty {
   font-size: 0.85rem;
@@ -308,6 +366,16 @@ button.thumb {
 .status progress {
   width: 100%;
 }
+.status.info {
+  color: var(--muted);
+}
+.status.warn {
+  color: var(--text);
+  background: var(--bg);
+  border-left: 3px solid var(--danger);
+  padding: 6px 10px;
+  border-radius: 4px;
+}
 .notice {
   font-size: 0.85rem;
   background: var(--panel);
@@ -317,6 +385,7 @@ button.thumb {
   margin-bottom: 12px;
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 8px;
 }
 
@@ -340,6 +409,259 @@ button.thumb {
   margin-top: 5px;
 }
 
+/* --- 服の登録・編集 --- */
+.editor-photo {
+  background: var(--bg);
+  border-radius: var(--radius);
+  overflow: hidden;
+  display: flex;
+  justify-content: center;
+}
+.editor-photo img {
+  width: 100%;
+  max-height: 38dvh;
+  object-fit: contain;
+  display: block;
+}
+.field-group {
+  margin: 12px 0;
+}
+.seg {
+  display: flex;
+  background: var(--bg);
+  border-radius: 10px;
+  padding: 3px;
+  margin-bottom: 10px;
+  overflow-x: auto;
+}
+.seg button {
+  flex: 1 0 auto;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 8px 6px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.seg button.on {
+  background: var(--panel);
+  color: var(--text);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+.swatches {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+.swatch {
+  font: inherit;
+  font-size: 0.75rem;
+  color: inherit;
+  background: transparent;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 6px 2px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+.swatch .color-dot {
+  width: 28px;
+  height: 28px;
+}
+.swatch.on {
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.more {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 4px;
+}
+.more summary {
+  cursor: pointer;
+  padding: 10px 0;
+  font-size: 0.9rem;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.more summary .hint {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.more-body {
+  padding-bottom: 8px;
+}
+/* 保存ボタンは、下のタブのすぐ上に固定して、いつでも押せるようにする */
+.sticky-actions {
+  position: sticky;
+  bottom: calc(58px + env(safe-area-inset-bottom));
+  display: flex;
+  gap: 8px;
+  background: var(--panel);
+  margin: 12px -16px -16px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--line);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+.grow {
+  flex: 1;
+}
+.pickers {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin: 12px 0;
+}
+.picker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 132px;
+  border: 2px dashed var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-weight: 600;
+  text-align: center;
+  padding: 12px;
+}
+.picker small {
+  font-weight: normal;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.picker-icon {
+  color: var(--accent);
+}
+
+/* 最初の画面：カメラを大きく、アルバムはその下に薄く細長く */
+.pickers.stacked {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.pickers.stacked .picker.camera {
+  min-height: 200px;
+  gap: 10px;
+  font-size: 1.1rem;
+  background: var(--accent);
+  color: var(--accent-text);
+  border: 0;
+}
+.pickers.stacked .picker.camera .picker-icon {
+  color: inherit;
+}
+.pickers.stacked .picker.album {
+  min-height: 48px;
+  flex-direction: row;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  font-weight: normal;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+.pickers.stacked .picker.album .picker-icon {
+  color: var(--muted);
+}
+.pickers.stacked .picker.album small {
+  margin-left: auto;
+}
+.pickers.compact .picker {
+  min-height: 0;
+  flex-direction: row;
+  font-weight: normal;
+  padding: 10px;
+}
+.pickers.compact .picker {
+  gap: 8px;
+}
+.thumb.pending img {
+  opacity: 0.5;
+}
+.thumb.pending .thumb-label {
+  color: var(--muted);
+}
+.choose {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin: 12px 0;
+}
+.choose p {
+  margin: 0 0 4px;
+}
+.choose-photo {
+  width: 96px;
+  height: 96px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex: none;
+}
+.choose .row {
+  margin-bottom: 8px;
+}
+
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.size-row .chips.scroll {
+  margin: 0 -16px 0 0;
+  padding: 0 16px 0 0;
+  flex: 1;
+  min-width: 0;
+}
+.size-row-label {
+  flex: none;
+  font-size: 0.8rem;
+  color: var(--muted);
+  min-width: 4.5em;
+}
+.size-hint {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+}
+legend.with-icon {
+  display: flex;
+}
+
+/* --- コーデ --- */
+.conditions {
+  margin-bottom: 8px;
+}
+.must {
+  margin: 4px 0 8px;
+  min-height: 44px;
+}
+.must-list {
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+.must-item .thumb {
+  width: 56px;
+}
+.must-item .thumb-label {
+  display: none;
+}
+.results.loading {
+  opacity: 0.5;
+  transition: opacity 0.2s;
+}
+
 .tabs {
   position: fixed;
   left: 0;
@@ -355,14 +677,323 @@ button.thumb {
   flex: 1;
   max-width: 180px;
   font: inherit;
-  font-size: 0.85rem;
+  font-size: 0.68rem;
+  line-height: 1.2;
   color: var(--muted);
   background: none;
   border: 0;
-  padding: 14px 4px;
+  padding: 8px 4px 6px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  -webkit-tap-highlight-color: transparent;
 }
 .tabs button.on {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* コーデの「着たときのイメージ」 */
+:root {
+  --figure-bg-1: #fbf9f6;
+  --figure-bg-2: #e9e3da;
+  --figure-mark: #9a9086;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --figure-bg-1: #3a362f;
+    --figure-bg-2: #24211d;
+    --figure-mark: #8d847a;
+  }
+}
+.look-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.look-figure {
+  flex: 0 0 44%;
+  margin: 0;
+}
+.look-figure svg.figure {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.look-figure figcaption {
+  font-size: 0.7rem;
+  color: var(--muted);
+  text-align: center;
+  margin-top: 2px;
+}
+.grid.look-items {
+  flex: 1;
+  min-width: 0;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.look-photos {
+  margin-top: 10px;
+}
+.photo-strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -16px;
+  padding: 0 16px;
+}
+.photo-strip::-webkit-scrollbar {
+  display: none;
+}
+.photo-strip a {
+  flex: none;
+}
+.photo-strip img {
+  display: block;
+  width: 96px;
+  height: 144px;
+  object-fit: cover;
+  border-radius: 10px;
+  background: var(--line);
+}
+.credit {
+  font-size: 0.7rem;
+  color: var(--muted);
+  margin: 4px 0 0;
+}
+.credit a {
+  color: inherit;
+}
+.refs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  align-items: center;
+  margin-top: 8px;
+}
+.refs a {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  color: var(--accent);
+}
+
+/* 3Dの「着たときのイメージ」 */
+.figure3d {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 300 / 560;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: radial-gradient(circle at 50% 42%, var(--figure-bg-1), var(--figure-bg-2));
+}
+.figure3d img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.figure3d-loading {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.figure3d-badge {
+  position: absolute;
+  right: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text);
+  opacity: 0.9;
+}
+.viewer3d {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: radial-gradient(circle at 50% 42%, var(--figure-bg-1), var(--figure-bg-2));
+  padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom);
+}
+.viewer3d-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 8px 0 16px;
+  font-weight: 600;
+}
+.viewer3d-canvas {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  touch-action: none;
+}
+.viewer3d-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0 0 16px;
+}
+.body-preview,
+.scan-result {
+  height: 320px;
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0;
+  background: radial-gradient(circle at 50% 42%, var(--figure-bg-1), var(--figure-bg-2));
+}
+.scan-result {
+  height: 420px;
+}
+.body-preview .viewer3d-canvas,
+.scan-result .viewer3d-canvas {
+  height: 100%;
+}
+.privacy {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.privacy svg {
+  flex: none;
+  margin-top: 4px;
+}
+.scan-steps {
+  display: flex;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 4px;
+  counter-reset: step;
+}
+.scan-steps li {
+  flex: 1;
+  text-align: center;
+  font-size: 0.8rem;
+  padding: 4px 0;
+  border-radius: 999px;
+  background: var(--bg);
+  color: var(--muted);
+}
+.scan-steps li.on {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.scan-steps li.done {
+  color: var(--accent);
+}
+.tips {
+  margin: 4px 0 12px;
+  padding-left: 1.2em;
+  font-size: 0.9rem;
+}
+
+
+/* --- 確認したい服・絞り込み・着た記録 --- */
+.thumb {
+  position: relative;
+}
+.thumb-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f6c343;
+  color: #3a2d00;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.thumb-caption {
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 0 6px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.banner {
+  font: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: color-mix(in srgb, #f6c343 22%, var(--panel));
+  border: 1px solid color-mix(in srgb, #f6c343 55%, var(--line));
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.banner svg {
+  flex: none;
+  margin-top: 3px;
+}
+.chip .count {
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+.btn.wear.on {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.today-wear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  margin: 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.today-wear .grow {
+  flex: none;
+  font-weight: 600;
+}
+.today-wear .must-list {
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.today-wear .btn {
+  flex: none;
+}
+.status.warn.with-icon {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: flex-start;
+}
+.status.warn.with-icon svg {
+  flex: none;
+  margin-top: 3px;
 }

@@ -1,5 +1,6 @@
 // 端末内AIのコーデ提案。種類・色・気温・目的・過去の評価から点数を付けて上位3案を選ぶ。
-import { colorHarmony, colorLabel } from "../../domain/colors";
+import { colorHarmony, garmentLabel, paletteOf, patternBalance } from "../../domain/colors";
+import { bodyTips, type Profile } from "../../domain/profile";
 import type {
   Feedback,
   Formality,
@@ -39,8 +40,11 @@ interface Combo {
   items: GarmentInfo[];
 }
 
-/** 手持ちの服から、着られる組み合わせを全部作る（トップス×ボトムス or ワンピース、＋アウター、＋靴） */
-export function buildCombos(closet: GarmentInfo[], temperatureC?: number): Combo[] {
+/**
+ * 手持ちの服から、着られる組み合わせを全部作る（トップス×ボトムス or ワンピース、＋アウター、＋靴）。
+ * required を渡すと、その服を含む組み合わせだけを作る（買い足し候補の計算を速くするため）。
+ */
+export function buildCombos(closet: GarmentInfo[], temperatureC?: number, required?: GarmentInfo): Combo[] {
   const by = (c: GarmentInfo["category"]) => closet.filter((g) => g.category === c);
   const tops = by("tops");
   const bottoms = by("bottoms");
@@ -49,13 +53,17 @@ export function buildCombos(closet: GarmentInfo[], temperatureC?: number): Combo
   const shoes = by("shoes");
   const { outer } = climateFor(temperatureC);
 
-  const bases: GarmentInfo[][] = [];
-  for (const t of tops) for (const b of bottoms) bases.push([t, b]);
-  for (const o of onepieces) bases.push([o]);
+  const req = required?.category;
+  const only = (c: GarmentInfo["category"], list: GarmentInfo[]) => (req === c ? [required!] : list);
 
-  const outerOptions: (GarmentInfo | null)[] =
+  const bases: GarmentInfo[][] = [];
+  if (req !== "onepiece") for (const t of only("tops", tops)) for (const b of only("bottoms", bottoms)) bases.push([t, b]);
+  if (req !== "tops" && req !== "bottoms") for (const o of only("onepiece", onepieces)) bases.push([o]);
+
+  let outerOptions: (GarmentInfo | null)[] =
     outer === "none" ? [null] : outer === "required" && outers.length > 0 ? outers : [null, ...outers];
-  const shoeOptions: (GarmentInfo | null)[] = shoes.length > 0 ? shoes : [null];
+  if (req === "outer") outerOptions = outer === "none" ? [] : [required!];
+  const shoeOptions: (GarmentInfo | null)[] = req === "shoes" ? [required!] : shoes.length > 0 ? shoes : [null];
 
   const combos: Combo[] = [];
   for (const base of bases)
@@ -104,10 +112,15 @@ export function scoreCombo(items: GarmentInfo[], request: OutfitRequest, fb: Fee
   const reasons: string[] = [];
   let score = 0;
 
-  // 色
-  const harmony = colorHarmony(items.map((g) => g.color));
+  // 色（柄ものは柄の色も数える）
+  const harmony = colorHarmony(paletteOf(items));
   score += harmony.score;
   reasons.push(...harmony.reasons);
+
+  // 柄は1点まで
+  const pattern = patternBalance(items);
+  score += pattern.score;
+  reasons.push(...pattern.reasons);
 
   // 季節・気温
   const climate = climateFor(request.temperatureC);
@@ -142,6 +155,9 @@ export function scoreCombo(items: GarmentInfo[], request: OutfitRequest, fb: Fee
     for (let j = i + 1; j < items.length; j++) pairScore += fb.pairs.get(pairKey(items[i].id, items[j].id)) ?? 0;
   score += Math.max(-3, Math.min(3, pairScore * 0.5));
 
+  // 最近着た服は少し後回し（昨日と同じ服にならないように。靴は毎日でもよいので数えない）
+  score -= recentWearPenalty(items, request.recentlyWorn);
+
   // 自由記述の好み（端末内AIは簡単なキーワードだけ見る）
   const pref = request.preference ?? "";
   if (/明る|華やか|派手/.test(pref) && items.some((g) => !["black", "gray", "navy", "brown"].includes(g.color))) score += 0.5;
@@ -150,6 +166,19 @@ export function scoreCombo(items: GarmentInfo[], request: OutfitRequest, fb: Fee
 
   reasons.push(...stylingTips(items));
   return { items, score, reasons };
+}
+
+/** 直近に着た服ほど大きく引く（1件目=昨日相当 1.0、2件目 0.6、3件目 0.3）。靴は除く */
+export function recentWearPenalty(items: GarmentInfo[], recent: OutfitRequest["recentlyWorn"]): number {
+  if (!recent?.length) return 0;
+  const weights = [1, 0.6, 0.3];
+  let penalty = 0;
+  for (const g of items) {
+    if (g.category === "shoes") continue;
+    const idx = recent.findIndex((r) => r.garmentIds.includes(g.id));
+    if (idx >= 0 && idx < weights.length) penalty += weights[idx];
+  }
+  return Math.min(2.5, penalty);
 }
 
 /** 袖・裾などの着こなしのコツ（種類の名前から判断） */
@@ -166,7 +195,7 @@ export function stylingTips(items: GarmentInfo[]): string[] {
     tips.push(`細身のボトムスなので、${top.subType || "トップス"}は外に出してゆるさを足すと今っぽく見えます。`);
   }
   // 「Tシャツ」は袖をまくる対象にしない
-  const shirt = /(?<![TＴ])シャツ|ブラウス/;
+  const shirt = /(?<![TＴロ])シャツ|ブラウス/;
   if (has(top, shirt) && outer) {
     tips.push("アウターの袖を少しまくって、シャツの袖口をのぞかせると軽く見えます。");
   } else if (has(top, shirt)) {
@@ -182,8 +211,10 @@ export function stylingTips(items: GarmentInfo[]): string[] {
 }
 
 function titleFor(items: GarmentInfo[]): string {
-  const main = items.filter((g) => g.category !== "shoes").map((g) => `${colorLabel(g.color)}の${g.subType || "服"}`);
-  return main.join(" × ");
+  return items
+    .filter((g) => g.category !== "shoes")
+    .map((g) => garmentLabel(g))
+    .join(" × ");
 }
 
 /** 似た案ばかりにならないように、服がかぶる案は後回しにしながら上位を選ぶ */
@@ -196,9 +227,8 @@ export function pickDiverse(scored: ScoredCombo[], n: number): ScoredCombo[] {
     let bestIdx = 0;
     let bestVal = -Infinity;
     for (let i = 0; i < remaining.length; i++) {
-      const overlap = remaining[i].items
-        .filter((g) => g.category !== "shoes")
-        .reduce((s, g) => s + (used.get(g.id) ?? 0), 0);
+      // 靴は持っている数が少ないので軽めに数える（それでも3案とも同じ靴にはなりにくくする）
+      const overlap = remaining[i].items.reduce((s, g) => s + (used.get(g.id) ?? 0) * (g.category === "shoes" ? 0.5 : 1), 0);
       const val = remaining[i].score - overlap * 1.2;
       if (val > bestVal) {
         bestVal = val;
@@ -212,15 +242,25 @@ export function pickDiverse(scored: ScoredCombo[], n: number): ScoredCombo[] {
   return picked;
 }
 
-export function suggestOutfitsLocal(closet: GarmentInfo[], request: OutfitRequest, feedback: Feedback[]): Outfit[] {
+export function suggestOutfitsLocal(
+  closet: GarmentInfo[],
+  request: OutfitRequest,
+  feedback: Feedback[],
+  profile: Profile = {},
+): Outfit[] {
   const fb = indexFeedback(feedback);
+  const shown = new Set(request.exclude ?? []);
   const combos = buildCombos(closet, request.temperatureC)
     .filter((c) => request.mustInclude.every((id) => c.items.some((g) => g.id === id)))
-    .filter((c) => !fb.dislikedOutfits.has(outfitKey(c.items.map((g) => g.id))));
+    .filter((c) => {
+      const key = outfitKey(c.items.map((g) => g.id));
+      return !fb.dislikedOutfits.has(key) && !shown.has(key);
+    });
 
   const scored = combos.map((c) => scoreCombo(c.items, request, fb));
   return pickDiverse(scored, MAX_OUTFITS).map((s) => {
     const ids = s.items.map((g) => g.id);
-    return { key: outfitKey(ids), garmentIds: ids, title: titleFor(s.items), explanation: s.reasons, score: s.score };
+    const explanation = [...s.reasons, ...bodyTips(s.items, profile)];
+    return { key: outfitKey(ids), garmentIds: ids, title: titleFor(s.items), explanation, score: s.score };
   });
 }
