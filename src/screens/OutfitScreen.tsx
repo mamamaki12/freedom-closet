@@ -3,6 +3,7 @@ import { CalendarCheck, Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal,
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, GarmentThumb } from "../components/common";
+import type { BodyScan } from "../body/types";
 import type { Profile } from "../domain/profile";
 import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
 import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose, type WearRecord } from "../domain/types";
@@ -26,9 +27,12 @@ export function OutfitScreen({
   initialMustInclude = [],
   onGoCloset,
   profile,
+  bodyScan,
 }: {
   ai: ClosetAI;
   profile: Profile;
+  /** 体の写真から作った体型。なければ身長・体重から */
+  bodyScan?: BodyScan;
   garments: Garment[];
   feedback: Feedback[];
   onFeedback: (f: Feedback) => Promise<void>;
@@ -242,7 +246,7 @@ export function OutfitScreen({
             <h3>
               案{page * 3 + i + 1}：{o.title}
             </h3>
-            <OutfitLook items={itemsOf(o)} profile={profile}>
+            <OutfitLook items={itemsOf(o)} profile={profile} bodyScan={bodyScan}>
               {o.garmentIds.map((id) => {
                 const g = byId.get(id);
                 return g ? <GarmentThumb key={id} garment={g} size="sm" /> : null;
