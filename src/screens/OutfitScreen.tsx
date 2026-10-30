@@ -1,11 +1,12 @@
 // コーデを3案。画面を開いたらすぐ出し、条件はタップで変えるだけ（変えたら出し直す）。
-import { Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, X } from "lucide-react";
+import { CalendarCheck, Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, GarmentThumb } from "../components/common";
 import type { Profile } from "../domain/profile";
 import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
-import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose } from "../domain/types";
+import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose, type WearRecord } from "../domain/types";
+import { dayKey, recentWears } from "../domain/wear";
 import { LookPhotos, OutfitLook } from "./OutfitLook";
 import { FEELS, loadConditions, saveConditions, temperatureFor, type Feel } from "../storage/conditions";
 
@@ -20,6 +21,8 @@ export function OutfitScreen({
   garments,
   feedback,
   onFeedback,
+  wears,
+  onWear,
   initialMustInclude = [],
   onGoCloset,
   profile,
@@ -29,6 +32,9 @@ export function OutfitScreen({
   garments: Garment[];
   feedback: Feedback[];
   onFeedback: (f: Feedback) => Promise<void>;
+  wears: WearRecord[];
+  /** 「今日はこれ」。同じ案をもう一度押したら取り消す（null） */
+  onWear: (o: Outfit | null) => Promise<void>;
   /** クローゼットの「この服でコーデ」から来たときの服 */
   initialMustInclude?: string[];
   onGoCloset: () => void;
@@ -61,6 +67,10 @@ export function OutfitScreen({
   const profileJson = JSON.stringify(profile);
   const validMustInclude = mustInclude.filter((id) => byId.has(id));
   const mustKey = validMustInclude.join(",");
+  const today = dayKey(new Date());
+  const todayWear = wears.find((w) => w.day === today);
+  // 昨日までの「着た」記録。今日の分を押しても出し直さない
+  const recentJson = JSON.stringify(recentWears(wears, today));
 
   useEffect(() => {
     if (!ready) return;
@@ -76,6 +86,7 @@ export function OutfitScreen({
         purpose,
         preference: preference || undefined,
         exclude: shownRef.current.length ? shownRef.current : undefined,
+        recentlyWorn: JSON.parse(recentJson),
       },
       feedback: feedbackRef.current,
       profile: JSON.parse(profileJson),
@@ -87,7 +98,7 @@ export function OutfitScreen({
       })
       .catch((e) => seq === seqRef.current && setError(errorMessage(e)))
       .finally(() => seq === seqRef.current && setLoading(false));
-  }, [ai, ready, closetJson, profileJson, mustKey, feel, purpose, preference, page]);
+  }, [ai, ready, closetJson, profileJson, mustKey, feel, purpose, preference, page, recentJson]);
 
   // 条件を変えたら「ほかの案」の続きはやめて、最初から出し直す
   function change(apply: () => void) {
@@ -199,6 +210,22 @@ export function OutfitScreen({
         </details>
       </div>
 
+      {todayWear && todayWear.garmentIds.length > 0 && (
+        <div className="today-wear" role="status">
+          <CalendarCheck {...ICON} />
+          <span className="grow">今日はこれ</span>
+          <span className="must-list">
+            {todayWear.garmentIds.flatMap((id) => {
+              const g = byId.get(id);
+              return g ? [<span key={id} className="must-item"><GarmentThumb garment={g} size="sm" /></span>] : [];
+            })}
+          </span>
+          <button className="btn ghost small" onClick={() => onWear(null)}>
+            取り消す
+          </button>
+        </div>
+      )}
+
       {error && <p className="error">{error}</p>}
       {loading && !outfits && <p className="hint">考え中…</p>}
 
@@ -228,6 +255,15 @@ export function OutfitScreen({
             </ul>
             <LookPhotos items={itemsOf(o)} profile={profile} />
             <div className="actions">
+              <button
+                className={`btn wear${todayWear?.outfitKey === o.key ? " on" : ""}`}
+                aria-pressed={todayWear?.outfitKey === o.key}
+                onClick={() => onWear(todayWear?.outfitKey === o.key ? null : o)}
+              >
+                <CalendarCheck {...ICON} />
+                {todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"}
+              </button>
+              <span className="grow" />
               <button
                 className={`btn icon-only like${ratings.get(o.key) === true ? " on" : ""}`}
                 aria-pressed={ratings.get(o.key) === true}
