@@ -4,10 +4,11 @@ import { ArrowLeft, Ban, Camera, Check, Images, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
+import { shortLabel } from "../domain/colors";
 import { ICON } from "../components/icons";
 import { applyPreset, PRESETS, presetFor, type Preset } from "../domain/presets";
 import { sizeGroup, type Profile } from "../domain/profile";
-import { CATEGORIES, CATEGORY_LABELS, type Garment, type GarmentAnalysis } from "../domain/types";
+import { CATEGORIES, CATEGORY_LABELS, REVIEW_THRESHOLD, type Garment, type GarmentAnalysis } from "../domain/types";
 import { shrinkPhoto } from "../storage/photo";
 import { EMPTY_DRAFT, type Draft } from "./GarmentEditor";
 
@@ -31,12 +32,21 @@ function toItems(files: Iterable<File>): Item[] {
 /** 判定結果から登録内容を作る。種類が分からなければ undefined */
 export function draftFromAnalysis(a: GarmentAnalysis): Draft | undefined {
   if (!a.category) return undefined;
-  const base: Draft = { ...EMPTY_DRAFT, color: a.color };
+  const base: Draft = { ...EMPTY_DRAFT, ...colorsFromAnalysis(a) };
   const preset = presetFor(a.subType, a.category);
   return preset ? applyPreset(base, preset) : { ...base, category: a.category, subType: a.subType || CATEGORY_LABELS[a.category] };
 }
 
-function toGarment(photo: Blob, d: Draft, profile: Profile): Garment {
+/** 判定結果のうち、色と柄だけ（種類が分からなかったときにも使う） */
+function colorsFromAnalysis(a: GarmentAnalysis): Pick<Draft, "color" | "pattern" | "subColor"> {
+  return { color: a.color, pattern: a.pattern ?? "solid", ...(a.subColor ? { subColor: a.subColor } : {}) };
+}
+
+/**
+ * 登録する服を作る。自動判定のまま登録するときは確からしさも残し、
+ * 低ければ「確認したい服」の目印を付ける（本人が種類を選んだときは付けない）。
+ */
+export function toGarment(photo: Blob, d: Draft, profile: Profile, auto?: { confidence: number }): Garment {
   // サイズは写真から分からないので、いつものサイズを入れておく（違えばあとで直す）
   const size = d.size ?? profile.usualSize?.[sizeGroup(d.category)];
   return {
@@ -46,6 +56,7 @@ function toGarment(photo: Blob, d: Draft, profile: Profile): Garment {
     id: crypto.randomUUID(),
     createdAt: Date.now(),
     photo,
+    ...(auto ? { aiConfidence: auto.confidence, ...(auto.confidence < REVIEW_THRESHOLD ? { needsReview: true } : {}) } : {}),
   };
 }
 
@@ -80,8 +91,15 @@ export function AddGarments({
   const update = (key: string, patch: Partial<Item>) =>
     setItems((cur) => cur.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
-  async function save(it: Item, draft: Draft, analysis?: { result: GarmentAnalysis; elapsedMs: number }, photo = it.photo) {
-    const garment = toGarment(photo, draft, profile);
+  async function save(
+    it: Item,
+    draft: Draft,
+    analysis?: { result: GarmentAnalysis; elapsedMs: number },
+    photo = it.photo,
+    /** 自動判定のまま登録するとき true（本人が種類を選んだときは false） */
+    auto = false,
+  ) {
+    const garment = toGarment(photo, draft, profile, auto && analysis ? { confidence: analysis.result.confidence } : undefined);
     await onSave(garment, analysis);
     update(it.key, { state: "saved", garment, draft, photo });
   }
@@ -101,8 +119,8 @@ export function AddGarments({
         const a = await ai.analyzeGarment(photo, { signal, onProgress: (p) => update(next.key, { progress: p }) });
         const elapsedMs = performance.now() - started;
         const draft = draftFromAnalysis(a);
-        if (draft) await save(next, draft, { result: a, elapsedMs }, photo);
-        else update(next.key, { state: "needsType", analysis: a, elapsedMs, photo, draft: { ...EMPTY_DRAFT, color: a.color } });
+        if (draft) await save(next, draft, { result: a, elapsedMs }, photo, true);
+        else update(next.key, { state: "needsType", analysis: a, elapsedMs, photo, draft: { ...EMPTY_DRAFT, ...colorsFromAnalysis(a) } });
       })
       // 中断されたとき（開発時の再マウントなど）は、もう一度判定しなおす
       .catch((e) => update(next.key, signal.aborted ? { state: "waiting" } : { state: "failed", error: errorMessage(e) }))
@@ -119,6 +137,7 @@ export function AddGarments({
   const remove = (key: string) => setItems((cur) => cur.filter((it) => it.key !== key));
 
   const saved = items.filter((it) => it.state === "saved").length;
+  const unsure = items.filter((it) => it.garment?.needsReview).length;
   const busy = items.filter((it) => it.state === "waiting" || it.state === "analyzing").length;
   const needs = items.filter((it) => it.state === "needsType" || it.state === "failed");
   const current = items.find((it) => it.state === "analyzing");
@@ -181,7 +200,12 @@ export function AddGarments({
                 <AddedThumb key={it.key} item={it} onClick={it.garment && !busy ? () => onEdit(it.garment!) : undefined} />
               ))}
           </div>
-          {saved > 0 && !busy && <p className="hint">違っていたら、タップして直せます。</p>}
+          {saved > 0 && !busy && (
+            <p className="hint">
+              違っていたら、タップして直せます。
+              {unsure > 0 && `「確認」の付いた${unsure}着は自信がないので、あとでクローゼットからも見られます。`}
+            </p>
+          )}
 
           <PhotoPickers onPick={addPhotos} compact />
         </>
@@ -193,10 +217,11 @@ export function AddGarments({
 function AddedThumb({ item, onClick }: { item: Item; onClick?: () => void }) {
   const url = usePhotoUrl(item.photo);
   const Tag = onClick ? "button" : "div";
-  const label = item.garment ? item.garment.subType : item.state === "analyzing" ? "判定中…" : "待っています";
+  const label = item.garment ? shortLabel(item.garment) : item.state === "analyzing" ? "判定中…" : "待っています";
   return (
     <Tag type={onClick ? "button" : undefined} className={`thumb${item.garment ? "" : " pending"}`} onClick={onClick}>
       {url && <img src={url} alt={label} />}
+      {item.garment?.needsReview && <span className="thumb-badge">確認</span>}
       <span className="thumb-label">{label}</span>
     </Tag>
   );

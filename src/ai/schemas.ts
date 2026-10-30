@@ -2,16 +2,19 @@
 // 両方からこのファイルを読み、形がずれないようにする。
 import { z } from "zod";
 import { FITS } from "../domain/profile";
-import { CATEGORIES, COLOR_NAMES, FORMALITIES, PURPOSES, SEASONS } from "../domain/types";
+import { CATEGORIES, COLOR_NAMES, FORMALITIES, PATTERNS, PURPOSES, SEASONS } from "../domain/types";
 
 export const categorySchema = z.enum(CATEGORIES);
 export const colorSchema = z.enum(COLOR_NAMES);
+export const patternSchema = z.enum(PATTERNS);
 
 export const garmentInfoSchema = z.object({
   id: z.string().min(1).max(64),
   category: categorySchema,
   subType: z.string().max(40),
   color: colorSchema,
+  pattern: patternSchema.optional(),
+  subColor: colorSchema.optional(),
   seasons: z.array(z.enum(SEASONS)).max(4),
   formality: z.enum(FORMALITIES),
   warmth: z.union([z.literal(1), z.literal(2), z.literal(3)]),
@@ -47,6 +50,7 @@ export const outfitsRequestSchema = z.object({
     purpose: z.enum(PURPOSES),
     preference: z.string().max(300).optional(),
     exclude: z.array(z.string().max(1000)).max(30).optional(),
+    recentlyWorn: z.array(z.object({ garmentIds: z.array(z.string().max(64)).max(10), day: z.string().max(10) })).max(7).optional(),
   }),
   feedback: feedbackListSchema,
   profile: profileSchema,
@@ -74,8 +78,14 @@ export const analyzeRequestSchema = z.object({
 export const analyzeResultSchema = z.object({
   category: categorySchema,
   subType: z.string().describe("服の種類を日本語で短く。例：Tシャツ、シャツ、ワイドパンツ"),
-  color: colorSchema,
-  confidence: z.number().describe("0〜1。写真から判断しにくいときは低く"),
+  color: colorSchema.describe("いちばん面積の大きい色。柄ものなら地の色"),
+  pattern: patternSchema.describe("無地なら solid。ボーダー・ストライプは stripe、チェックは check、花柄は floral、ドットは dot、それ以外の柄・大きなプリント・色の切り替えは print"),
+  subColor: colorSchema.nullable().describe("2番目に目立つ色（柄の色・切り替えの色）。無地なら null"),
+  alternatives: z
+    .array(z.object({ category: categorySchema, subType: z.string() }))
+    .max(2)
+    .describe("迷ったときの別の候補（なければ空）。例：シャツかブラウスか迷ったらもう一方を入れる"),
+  confidence: z.number().describe("0〜1。種類と色の両方に自信があれば 0.9 以上、どちらかに迷いがあれば 0.6 以下にする"),
 });
 
 export const outfitsResultSchema = z.object({

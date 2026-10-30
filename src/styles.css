@@ -905,3 +905,95 @@ legend.with-icon {
   padding-left: 1.2em;
   font-size: 0.9rem;
 }
+
+
+/* --- 確認したい服・絞り込み・着た記録 --- */
+.thumb {
+  position: relative;
+}
+.thumb-badge {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f6c343;
+  color: #3a2d00;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+.thumb-caption {
+  font-size: 0.7rem;
+  color: var(--muted);
+  padding: 0 6px 5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.banner {
+  font: inherit;
+  font-size: 0.85rem;
+  color: inherit;
+  text-align: left;
+  width: 100%;
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: color-mix(in srgb, #f6c343 22%, var(--panel));
+  border: 1px solid color-mix(in srgb, #f6c343 55%, var(--line));
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+.banner svg {
+  flex: none;
+  margin-top: 3px;
+}
+.chip .count {
+  font-size: 0.7rem;
+  opacity: 0.75;
+}
+.btn.wear.on {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+.today-wear {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  padding: 8px 10px;
+  margin: 4px 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+}
+.today-wear .grow {
+  flex: none;
+  font-weight: 600;
+}
+.today-wear .must-list {
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.today-wear .btn {
+  flex: none;
+}
+.status.warn.with-icon {
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  align-items: flex-start;
+}
+.status.warn.with-icon svg {
+  flex: none;
+  margin-top: 3px;
+}

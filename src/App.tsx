@@ -5,7 +5,8 @@ import { errorMessage } from "./components/common";
 import { ICON } from "./components/icons";
 import type { BodyScan } from "./body/types";
 import type { Profile } from "./domain/profile";
-import type { Feedback, Garment } from "./domain/types";
+import type { Feedback, Garment, Outfit, WearRecord } from "./domain/types";
+import { dayKey } from "./domain/wear";
 import { AddGarments } from "./screens/AddGarments";
 import { BodyScanScreen } from "./screens/BodyScanScreen";
 import { ClosetScreen } from "./screens/ClosetScreen";
@@ -33,6 +34,7 @@ export function App() {
   const [tab, setTab] = useState<Tab>("closet");
   const [garments, setGarments] = useState<Garment[]>([]);
   const [feedback, setFeedback] = useState<Feedback[]>([]);
+  const [wears, setWears] = useState<WearRecord[]>([]);
   const [sheet, setSheet] = useState<Sheet>(null);
   /** 「この服でコーデ」で選んだ服。変わるたびにコーデ画面を作り直す */
   const [styleWith, setStyleWith] = useState<{ ids: string[]; n: number }>({ ids: [], n: 0 });
@@ -48,14 +50,23 @@ export function App() {
   );
 
   const reload = useCallback(async () => {
-    const [g, f] = await Promise.all([db.listGarments(), db.listFeedback()]);
+    const [g, f, w] = await Promise.all([db.listGarments(), db.listFeedback(), db.listWear()]);
     setGarments(g);
     setFeedback(f);
+    setWears(w);
   }, []);
 
   useEffect(() => {
     reload().catch((e) => setNotice(`保存データを読み込めませんでした（${errorMessage(e)}）`));
   }, [reload]);
+
+  // 「今日はこれ」。1日1件で、同じ日にもう一度押したら上書き、null なら取り消し
+  const wearToday = async (o: Outfit | null) => {
+    const day = dayKey(new Date());
+    if (o) await db.saveWear({ day, garmentIds: o.garmentIds, outfitKey: o.key, at: Date.now() });
+    else await db.deleteWear(day);
+    await reload();
+  };
 
   return (
     <div className="app">
@@ -127,6 +138,7 @@ export function App() {
         ) : tab === "closet" ? (
           <ClosetScreen
             garments={garments}
+            wears={wears}
             onAdd={(files) => setSheet({ kind: "add", files })}
             onEdit={(garment) => setSheet({ kind: "edit", garment })}
           />
@@ -140,6 +152,8 @@ export function App() {
             onGoCloset={() => setTab("closet")}
             garments={garments}
             feedback={feedback}
+            wears={wears}
+            onWear={wearToday}
             onFeedback={async (f) => {
               const current = feedback.find((x) => x.outfitKey === f.outfitKey);
               // 同じ評価をもう一度押したら取り消す

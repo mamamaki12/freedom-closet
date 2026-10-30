@@ -62,12 +62,18 @@ export class ClaudeAI implements ClosetAI {
       (v) => analyzeResultSchema.parse(v),
       options?.signal,
     );
+    const confidence = Math.max(0, Math.min(1, r.confidence));
     return {
       category: r.category,
       subType: r.subType,
       color: r.color,
-      confidence: Math.max(0, Math.min(1, r.confidence)),
-      candidates: [{ category: r.category, subType: r.subType, score: r.confidence }],
+      pattern: r.pattern,
+      subColor: r.subColor ?? undefined,
+      confidence,
+      candidates: [
+        { category: r.category, subType: r.subType, score: confidence },
+        ...r.alternatives.map((a) => ({ ...a, score: (1 - confidence) / Math.max(1, r.alternatives.length) })),
+      ],
     };
   }
 
