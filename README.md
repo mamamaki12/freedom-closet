@@ -60,12 +60,18 @@ src/
     local/     端末内AI（種類判定・色の抽出・コーデと買い足しの点数付け）
     claude/    Claude API版（中継サーバーを呼ぶ）
     schemas.ts アプリと中継サーバーのやりとりの形（zod）
+  body/        体の写真の読み取りと 3D 表示（人体モデル human.ts、服 garments.ts、描画 render3d.ts）
+    assets/    3D の人体データ human.glb（MakeHuman から tools/body で作る）
   shop/        ユニクロ・GUの検索リンク、手選びの商品リスト
   storage/     端末内の保存
   screens/     画面
 server/        Claude API の中継サーバー
+tools/body/    3D の人体データを作る道具と、体型・服を並べて見るプレビュー
 docs/          設計メモ
 ```
+
+## 3D 表示の人体データ
+3D のマネキンは [MakeHuman](https://github.com/makehumancommunity/makehuman) の素体メッシュ・体型ターゲット・骨格から作っている（MakeHuman のデータは CC0 1.0）。作り方は `tools/body/build.mjs` の先頭と [docs/body-scan.md](docs/body-scan.md) の「3Dの人体モデル」にある。
 
 ## スマホで使う（GitHub Pages）
 main に push すると `.github/workflows/pages.yml` が自動でビルドして GitHub Pages に公開する。URL は `https://<GitHubのユーザー名>.github.io/freedom-closet/`。

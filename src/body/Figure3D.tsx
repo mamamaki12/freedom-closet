@@ -25,14 +25,28 @@ function canUse3D(): boolean {
   return webgl;
 }
 
-function useScene(scan: BodyScan, items: Garment[], scale: number) {
-  return () => load().then((r) => r.buildScene(scan, items, scale));
+function useScene(scan: BodyScan, items: Garment[], scale: number, profile: Profile) {
+  return () => load().then((r) => r.buildScene(scan, items, scale, profile));
 }
 
 /** 指で回して見る画面 */
-export function Viewer3D({ scan, items, scale, onClose, title }: { scan: BodyScan; items: Garment[]; scale: number; onClose?: () => void; title?: string }) {
+export function Viewer3D({
+  scan,
+  items,
+  scale,
+  profile,
+  onClose,
+  title,
+}: {
+  scan: BodyScan;
+  items: Garment[];
+  scale: number;
+  profile: Profile;
+  onClose?: () => void;
+  title?: string;
+}) {
   const ref = useRef<HTMLCanvasElement>(null);
-  const build = useScene(scan, items, scale);
+  const build = useScene(scan, items, scale, profile);
   const [error, setError] = useState(false);
   useEffect(() => {
     let stop: (() => void) | undefined;
@@ -46,7 +60,8 @@ export function Viewer3D({ scan, items, scale, onClose, title }: { scan: BodySca
       alive = false;
       stop?.();
     };
-  }, [scan, items, scale]);
+    // 体型（scan）と服が変わったときだけ作り直す
+  }, [scan, items, scale, profile.fit]);
   const canvas = <canvas ref={ref} className="viewer3d-canvas" aria-label="3Dモデル。指でなぞると回せます" />;
   if (!onClose) return error ? <p className="hint">3Dを表示できませんでした。</p> : canvas;
   return (
@@ -78,7 +93,7 @@ export function Figure3D({ items, profile, scan }: { items: Garment[]; profile: 
   // 服の種類・色・体型が変わったときだけ描き直す
   const key = items.map((g) => `${g.id}:${g.subType}:${g.color}`).join("|") + profileJson + (scan?.at ?? "");
   const stable = useMemo(() => items, [key]);
-  const build = useScene(body, stable, scale);
+  const build = useScene(body, stable, scale, profile);
 
   useEffect(() => {
     if (!canUse3D()) return setFailed(true);
@@ -109,7 +124,7 @@ export function Figure3D({ items, profile, scan }: { items: Garment[]; profile: 
         </span>
       </button>
       {/* 一覧のレイアウトの影響を受けないよう、画面のいちばん外側に出す */}
-      {open && createPortal(<Viewer3D scan={body} items={stable} scale={scale} onClose={() => setOpen(false)} />, document.body)}
+      {open && createPortal(<Viewer3D scan={body} items={stable} scale={scale} profile={profile} onClose={() => setOpen(false)} />, document.body)}
     </>
   );
 }
