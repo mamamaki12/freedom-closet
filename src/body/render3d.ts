@@ -332,13 +332,46 @@ export async function garmentTextures(
       128,
     );
   bmp.close();
+  // 地の色：生地の見本の範囲の平均（背景は除く）
+  let tone: string | undefined;
+  if (ok) {
+    let r = 0;
+    let gSum = 0;
+    let b = 0;
+    let c = 0;
+    for (
+      let y = Math.max(0, Math.floor(cy - side / 2));
+      y < Math.min(h, cy + side / 2);
+      y++
+    )
+      for (
+        let x = Math.max(0, Math.floor(cx - side / 2));
+        x < Math.min(w, cx + side / 2);
+        x++
+      ) {
+        const i = y * w + x;
+        if (!mask[i]) continue;
+        r += img.data[i * 4];
+        gSum += img.data[i * 4 + 1];
+        b += img.data[i * 4 + 2];
+        c++;
+      }
+    if (c > 0)
+      tone = `#${[r, gSum, b]
+        .map((v) =>
+          Math.round(v / c)
+            .toString(16)
+            .padStart(2, "0"),
+        )
+        .join("")}`;
+  }
   const tex = (c: HTMLCanvasElement) => {
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
     return t;
   };
-  return { whole: tex(whole), swatch: tex(swatch), bodyU };
+  return { whole: tex(whole), swatch: tex(swatch), bodyU, tone };
 }
 
 /** 一辺 side の四角のうち、服の写っている割合が高く、真ん中の少し左に近いものの中心 */
