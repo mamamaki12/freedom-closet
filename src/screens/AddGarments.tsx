@@ -134,8 +134,9 @@ export function AddGarments({
       });
   }, [items, ai]);
 
-  const addPhotos = (files: FileList | null) => {
-    if (files?.length) setItems((cur) => [...cur, ...toItems(files)]);
+  const addPhotos = (files: File[]) => {
+    const added = toItems(files);
+    setItems((cur) => [...cur, ...added]);
   };
   const remove = (key: string) => setItems((cur) => cur.filter((it) => it.key !== key));
 
@@ -276,8 +277,14 @@ function ChooseType({
  * 「撮る」と「アルバムから選ぶ」を分ける（capture を付けるとiPhoneでアルバムを選べないため）。
  * 最初は「カメラで撮る」を大きく、アルバムはその下に細く出す。登録画面の下では2つ並べて小さく出す。
  */
-export function PhotoPickers({ onPick, compact }: { onPick: (files: FileList | null) => void; compact?: boolean }) {
-  const pick = (e: React.ChangeEvent<HTMLInputElement>) => (onPick(e.target.files), (e.target.value = ""));
+export function PhotoPickers({ onPick, compact }: { onPick: (files: File[]) => void; compact?: boolean }) {
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // FileList は input の value を消すと空になるので、先に配列に写してから消す
+    // （setState の更新関数の中で読むと、もう空になっていて写真が足されないことがあった）
+    const files = e.target.files ? [...e.target.files] : [];
+    e.target.value = "";
+    if (files.length) onPick(files);
+  };
   return (
     <div className={compact ? "pickers compact" : "pickers stacked"}>
       <label className="picker camera">

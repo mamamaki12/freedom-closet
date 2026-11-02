@@ -47,8 +47,8 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
     setStep("done");
   }
 
-  async function read(files: FileList | null) {
-    const photo = files?.[0];
+  async function read(files: File[]) {
+    const photo = files[0];
     if (!photo) return;
     setBusy(true);
     setError(undefined);
