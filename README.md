@@ -67,6 +67,13 @@ server/        Claude API の中継サーバー
 docs/          設計メモ
 ```
 
+## スマホで使う（GitHub Pages）
+main に push すると `.github/workflows/pages.yml` が自動でビルドして GitHub Pages に公開する。URL は `https://<GitHubのユーザー名>.github.io/freedom-closet/`。
+- はじめて使うときは、リポジトリの Settings → Pages → Build and deployment の Source を「GitHub Actions」にする（ワークフローが自動で有効にできなかったとき）
+- 非公開リポジトリで Pages を使うには有料プランが必要。無料プランならリポジトリを公開にする
+- 公開されるのはアプリの画面だけ。登録した服の写真や体型の数字は、開いた端末のブラウザの中にだけ保存される
+- Claude API を使う中継サーバーは Pages には含まれない（端末内AIはそのまま使える）
+
 ## 未確認のこと
 - 端末内AIのモデル（`Xenova/clip-vit-base-patch32`）の判定精度と、iPhone Safariでの読込時間・メモリ。開発環境からモデルを取得できなかったため、実機で確認が必要
 - GU の検索URL（`https://www.gu-global.com/jp/ja/search?q=`）が実際に開けるか
