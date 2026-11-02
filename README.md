@@ -23,10 +23,10 @@ AIは `src/ai/types.ts` の `ClosetAI` という窓口に合わせて作って�
 
 | | 端末内AI（`local`） | Claude API（`claude`） |
 | --- | --- | --- |
-| 種類の判定 | Transformers.js＋CLIP（ゼロショット分類。1種類に複数の言い方を用意して合計） | Claudeが写真を見て判定（迷った候補も返す） |
+| 種類の判定 | Transformers.js＋CLIP（ゼロショット分類。1種類に複数の言い方を用意して合計）。写真側のモデル（約88MB）だけを端末で動かし、説明文側の数値は同梱 | Claudeが写真を見て判定（迷った候補も返す） |
 | 色・柄の判定 | 写真から地の色と2色目を計算し、柄はCLIPで判定 | Claudeが地の色・2色目・柄を判定 |
 | コーデ・買い足し | 独自の点数付け | Claudeが考える（写真は送らず、登録情報だけ送る） |
-| 写真の送信 | しない | 判定時だけ、中継サーバー経由でAnthropicへ |
+| 写真の送信 | しない | 判定時だけ、長辺768pxに縮めて中継サーバー経由でAnthropicへ |
 
 - 初期値は `.env` の `VITE_AI_PROVIDER`（`local` / `claude`）。アプリの設定画面でも切り替えられる
 - Claudeモードで失敗したときは端末内AIで続ける（設定で切れる）
@@ -52,6 +52,11 @@ npm run typecheck
 npm run build
 ```
 
+### 端末内AIの言い方を変えたとき
+種類・柄の判定は、英語の説明文（`src/ai/local/classifier.ts` の `LABELS` など）を数値にしたもの（`src/ai/local/textEmbeddings.json`）と写真を比べて決める。
+説明文やひな型を変えたら `npm run ai:embeddings` で数値を作り直す（Hugging Face から文章側のモデルを取るので通信が必要。約254MB、初回だけ）。
+作り直し忘れは `npm test` で分かる。GitHub Actions の「AI check」は、実際のモデルで数値の一致と、公開データセットの服の写真での正解率（種類 約94%）を確かめる。
+
 ## 構成
 ```
 src/
@@ -75,5 +80,5 @@ main に push すると `.github/workflows/pages.yml` が自動でビルドし�
 - Claude API を使う中継サーバーは Pages には含まれない（端末内AIはそのまま使える）
 
 ## 未確認のこと
-- 端末内AIのモデル（`Xenova/clip-vit-base-patch32`）の判定精度と、iPhone Safariでの読込時間・メモリ。開発環境からモデルを取得できなかったため、実機で確認が必要
+- 端末内AIの iPhone Safari での読込時間・メモリ（判定精度は公開データセットの服の写真713枚で種類の正解率 約94%。実機の写真での確認はまだ）
 - GU の検索URL（`https://www.gu-global.com/jp/ja/search?q=`）が実際に開けるか

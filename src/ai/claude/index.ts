@@ -112,8 +112,11 @@ export function sanitizeOutfits(r: OutfitsResult, closet: GarmentInfo[], mustInc
   return out.slice(0, MAX_OUTFITS);
 }
 
-/** 送る量を減らすため、長辺1024pxのJPEGに縮める（ブラウザ専用） */
-async function toBase64Jpeg(photo: Blob, maxSide = 1024): Promise<{ base64: string; mediaType: "image/jpeg" }> {
+/**
+ * 送る量を減らすため、長辺768pxのJPEGに縮める（ブラウザ専用）。
+ * 種類と色の判定にはこれで十分で、1024pxより送るデータが約4割、Claudeが読む量も約4割減る
+ */
+async function toBase64Jpeg(photo: Blob, maxSide = 768): Promise<{ base64: string; mediaType: "image/jpeg" }> {
   const bitmap = await createImageBitmap(photo);
   const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
   const canvas = new OffscreenCanvas(Math.round(bitmap.width * scale), Math.round(bitmap.height * scale));

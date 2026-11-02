@@ -46,6 +46,8 @@ export interface ClosetAI {
   /** 服の写真を端末の外に送るか。設定画面の注意書きに使う */
   readonly sendsPhotosOffDevice: boolean;
 
+  /** 使う前にモデルなどの読み込みを始めておく（省略可）。失敗しても何もしない */
+  prepare?(): void;
   analyzeGarment(photo: Blob, options?: AnalyzeOptions): Promise<GarmentAnalysis>;
   /** コーデ案を最大3つ。服の写真は渡さず、登録済みの情報だけで考える */
   suggestOutfits(input: OutfitInput, options?: { signal?: AbortSignal }): Promise<Outfit[]>;

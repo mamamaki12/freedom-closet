@@ -18,6 +18,8 @@ import { FIT_LABELS } from "../src/domain/profile";
 import { CATEGORY_LABELS, COLOR_NAMES, PATTERN_LABELS, PURPOSE_LABELS } from "../src/domain/types";
 
 const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
+/** 写真の判定だけ別のモデルにしたいとき（返事を速くしたいときなど）。未設定なら MODEL と同じ */
+const ANALYZE_MODEL = process.env.CLAUDE_MODEL_ANALYZE || MODEL;
 
 // ANTHROPIC_API_KEY を環境変数から読む
 const client = new Anthropic();
@@ -39,9 +41,10 @@ async function ask<T>(
   schema: z.ZodType<T>,
   content: Anthropic.Beta.BetaContentBlockParam[] | string,
   effort: "low" | "medium",
+  model = MODEL,
 ): Promise<T> {
   const response = await client.beta.messages.parse({
-    model: MODEL,
+    model,
     max_tokens: 16000,
     system: SYSTEM,
     messages: [{ role: "user", content }],
@@ -79,6 +82,7 @@ export async function analyzeGarment(input: z.infer<typeof analyzeRequestSchema>
       },
     ],
     "low",
+    ANALYZE_MODEL,
   );
 }
 

@@ -88,6 +88,9 @@ export function AddGarments({
     return () => ac.abort();
   }, []);
 
+  // 写真を選んでいる間に、判定モデルの読み込み（初回はダウンロード）を進めておく
+  useEffect(() => ai.prepare?.(), [ai]);
+
   const update = (key: string, patch: Partial<Item>) =>
     setItems((cur) => cur.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
@@ -247,7 +250,7 @@ function ChooseType({
         {url && <img className="choose-photo" src={url} alt="種類が分からなかった服" />}
         <div className="grow">
           <p>
-            {item.state === "failed" ? "うまく判定できませんでした。" : "種類だけ分かりませんでした。"}どれですか？
+            {item.state === "failed" ? "うまく判定できませんでした。" : item.analysis?.warning ?? "種類だけ分かりませんでした。"}どれですか？
             {rest > 0 && <span className="hint">（このあと{rest}枚）</span>}
           </p>
           <button className="btn ghost small" onClick={onRemove}>
