@@ -8,505 +8,185 @@ import type { Garment } from "../domain/types";
 import {
   buildBody,
   buildGarment,
+  Layers,
   prepareFigure,
   THREE,
   type Paint,
 } from "./model3d";
+import { garmentMatte } from "./cutout";
+import { loadShoe } from "./shoe";
+import {
+  columnSpans,
+  erode,
+  flattenLight,
+  garmentMask,
+  matteMask,
+  planSwatches,
+  pushPullFill,
+  type PhotoKind,
+} from "./photoMask";
 import type { BodyScan } from "./types";
+
+export type { PhotoKind };
 
 // ---------- 服の写真から模様を作る ----------
 
-interface Shot {
-  width: number;
-  height: number;
-  data: Uint8ClampedArray;
+/** 服の部分が写真のほどよい割合なら、切り抜きはうまくいっている */
+function plausible(mask: Uint8Array, w: number, h: number): boolean {
+  let c = 0;
+  for (const v of mask) c += v;
+  return c > w * h * 0.12 && c < w * h * 0.97;
+}
+
+function canvasOf(w: number, h: number) {
+  const c = document.createElement("canvas");
+  c.width = w;
+  c.height = h;
+  return c;
 }
 
 /**
- * 写真のふち（背景）に近い色でつながっている部分を背景とみなす。
- * 床や壁の上に置いて撮った写真なら、服の部分だけが残る。返り値は 1 が服。
+ * 服の写真から、1枚貼る用（服の範囲いっぱいに、背景はまわりの服の色で埋める）と、
+ * 敷き詰める用の生地の見本（胴・袖）を作る。
+ * 切り抜きは端末の中の切り抜きAI（cutout.ts）。使えないときは写真のふちの色から決める。
  */
-function garmentMask(img: Shot): Uint8Array {
-  const { width: w, height: h, data } = img;
-  const n = w * h;
-  // 背景の色：ふちの色の中央値
-  const border: number[][] = [[], [], []];
-  const push = (i: number) => {
-    for (let c = 0; c < 3; c++) border[c].push(data[i * 4 + c]);
-  };
-  for (let x = 0; x < w; x++) {
-    push(x);
-    push((h - 1) * w + x);
-  }
-  for (let y = 0; y < h; y++) {
-    push(y * w);
-    push(y * w + w - 1);
-  }
-  const bg = border.map(
-    (arr) => arr.sort((a, b) => a - b)[Math.floor(arr.length / 2)],
-  );
-  const dist = (i: number, r: number, g: number, b: number) =>
-    Math.hypot(data[i * 4] - r, data[i * 4 + 1] - g, data[i * 4 + 2] - b);
-  // 服の色（真ん中あたりの中央値）が背景に近いときは、許す差を小さくして服を削りすぎないようにする
-  const center: number[][] = [[], [], []];
-  for (let y = Math.floor(h * 0.3); y < h * 0.7; y++)
-    for (let x = Math.floor(w * 0.35); x < w * 0.65; x++)
-      for (let c = 0; c < 3; c++) center[c].push(data[(y * w + x) * 4 + c]);
-  const mid = center.map(
-    (arr) => arr.sort((a, b) => a - b)[Math.floor(arr.length / 2)],
-  );
-  const contrast = Math.hypot(mid[0] - bg[0], mid[1] - bg[1], mid[2] - bg[2]);
-  const TOL = Math.min(48, Math.max(12, contrast * 0.55));
-  const NEAR = Math.min(12, TOL * 0.3);
-  const isBg = new Uint8Array(n);
-  const queue: number[] = [];
-  const seed = (i: number) => {
-    if (!isBg[i] && dist(i, bg[0], bg[1], bg[2]) < TOL) {
-      isBg[i] = 1;
-      queue.push(i);
-    }
-  };
-  for (let x = 0; x < w; x++) {
-    seed(x);
-    seed((h - 1) * w + x);
-  }
-  for (let y = 0; y < h; y++) {
-    seed(y * w);
-    seed(y * w + w - 1);
-  }
-  // 背景は少しずつ色が変わる（影・グラデーション）ので、となりの色に近ければ広げる
-  while (queue.length) {
-    const i = queue.pop()!;
-    const x = i % w;
-    const y = (i - x) / w;
-    const r = data[i * 4];
-    const g = data[i * 4 + 1];
-    const b = data[i * 4 + 2];
-    for (const [dx, dy] of [
-      [1, 0],
-      [-1, 0],
-      [0, 1],
-      [0, -1],
-    ]) {
-      const nx = x + dx;
-      const ny = y + dy;
-      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-      const j = ny * w + nx;
-      if (isBg[j]) continue;
-      if (
-        dist(j, bg[0], bg[1], bg[2]) < TOL ||
-        (dist(j, r, g, b) < NEAR && dist(j, bg[0], bg[1], bg[2]) < TOL * 1.7)
-      ) {
-        isBg[j] = 1;
-        queue.push(j);
-      }
-    }
-  }
-  // ハンガーに掛けた服は、えりとハンガーの間に背景が閉じ込められて残る。
-  // 上のほう（上から1/4）にある、背景色のまとまった部分は背景にする（胸のロゴは下のほうなので消えない）
-  const like = new Uint8Array(n);
-  for (let i = 0; i < n; i++)
-    if (!isBg[i] && dist(i, bg[0], bg[1], bg[2]) < TOL) like[i] = 1;
-  const seen = new Uint8Array(n);
-  for (let y = 0; y < h * 0.25; y++)
-    for (let x = 0; x < w; x++) {
-      const i = y * w + x;
-      if (!like[i] || seen[i]) continue;
-      const region: number[] = [i];
-      seen[i] = 1;
-      for (let q = 0; q < region.length; q++) {
-        const j = region[q];
-        const jx = j % w;
-        const jy = (j - jx) / w;
-        for (const [dx, dy] of [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ]) {
-          const nx = jx + dx;
-          const ny = jy + dy;
-          if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-          const k = ny * w + nx;
-          if (like[k] && !seen[k]) {
-            seen[k] = 1;
-            region.push(k);
-          }
-        }
-      }
-      if (region.length >= n * 0.004) for (const j of region) isBg[j] = 1;
-    }
-  const mask = new Uint8Array(n);
-  for (let i = 0; i < n; i++) mask[i] = isBg[i] ? 0 : 1;
-  return cleanMask(mask, w, h, 2);
-}
-
-/**
- * 服の形を整える：細いもの（ハンガーの針金・糸くず）を消し、小さな切れ端を捨てる。
- * r は消す細さ（半径、ピクセル）。
- */
-function cleanMask(mask: Uint8Array, w: number, h: number, r: number) {
-  // 縮めてから広げる（開く）。正方形の窓なので横・縦に分けてできる
-  const pass = (src: Uint8Array, keepIf: (hit: boolean) => boolean) => {
-    const tmp = new Uint8Array(src.length);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        let hit = false;
-        for (let d = -r; d <= r && !hit; d++) {
-          const nx = x + d;
-          if (nx >= 0 && nx < w && src[y * w + nx] === 0) hit = true;
-        }
-        tmp[y * w + x] = keepIf(hit) ? 1 : 0;
-      }
-    const out = new Uint8Array(src.length);
-    for (let y = 0; y < h; y++)
-      for (let x = 0; x < w; x++) {
-        let hit = false;
-        for (let d = -r; d <= r && !hit; d++) {
-          const ny = y + d;
-          if (ny >= 0 && ny < h && tmp[ny * w + x] === 0) hit = true;
-        }
-        out[y * w + x] = keepIf(hit) ? 1 : 0;
-      }
-    return out;
-  };
-  const eroded = pass(mask, (hit) => !hit);
-  // 広げるときは「0 が窓にない」ではなく「1 が窓にある」なので、反転して同じ処理を使う
-  const inv = eroded.map((v) => 1 - v);
-  const opened = pass(inv, (hit) => !hit).map((v) => 1 - v);
-  // つながったかたまりごとに大きさを数え、いちばん大きいものの 1/4 未満は捨てる（靴は左右で2つなので残る）
-  const label = new Int32Array(w * h).fill(-1);
-  const areas: number[] = [];
-  const stack: number[] = [];
-  for (let i = 0; i < opened.length; i++) {
-    if (!opened[i] || label[i] >= 0) continue;
-    const id = areas.length;
-    let area = 0;
-    label[i] = id;
-    stack.push(i);
-    while (stack.length) {
-      const j = stack.pop()!;
-      area++;
-      const x = j % w;
-      const y = (j - x) / w;
-      for (const [dx, dy] of [
-        [1, 0],
-        [-1, 0],
-        [0, 1],
-        [0, -1],
-      ]) {
-        const nx = x + dx;
-        const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        const k = ny * w + nx;
-        if (opened[k] && label[k] < 0) {
-          label[k] = id;
-          stack.push(k);
-        }
-      }
-    }
-    areas.push(area);
-  }
-  const max = Math.max(0, ...areas);
-  const out = new Uint8Array(w * h);
-  for (let i = 0; i < out.length; i++)
-    out[i] = label[i] >= 0 && areas[label[i]] >= max * 0.25 ? 1 : 0;
-  return out;
-}
-
-/** 服の写真から、1枚貼る用（背景を服の色で塗りつぶし、服の範囲いっぱいに）と、敷き詰める用の模様を作る */
 export async function garmentTextures(
   photo: Blob,
   color: string,
+  opts: { kind?: PhotoKind; matte?: boolean } = {},
 ): Promise<Omit<Paint, "color">> {
+  const kind = opts.kind ?? "upper";
   const bmp = await createImageBitmap(photo);
   const S = 192;
   const k = Math.min(1, S / Math.max(bmp.width, bmp.height));
   const w = Math.max(8, Math.round(bmp.width * k));
   const h = Math.max(8, Math.round(bmp.height * k));
-  const small = document.createElement("canvas");
-  small.width = w;
-  small.height = h;
+  const small = canvasOf(w, h);
   const sctx = small.getContext("2d", { willReadFrequently: true })!;
   sctx.drawImage(bmp, 0, 0, w, h);
   const img = sctx.getImageData(0, 0, w, h);
-  const mask = garmentMask(img);
-  let count = 0;
-  const cols = new Float32Array(w);
-  const rows = new Float32Array(h);
-  for (let i = 0; i < mask.length; i++) {
-    if (!mask[i]) continue;
-    count++;
-    const x = i % w;
-    cols[x]++;
-    rows[(i - x) / w]++;
+  let mask: Uint8Array | undefined;
+  if (opts.matte !== false) {
+    const p = await garmentMatte(bmp, w, h).catch(() => undefined);
+    if (p) {
+      const m = matteMask(p, w, h);
+      if (plausible(m, w, h)) mask = m;
+    }
   }
-  // 服の範囲。端の、ほとんど服が写っていない行・列（ハンガーの残りなど）は含めない
-  const span = (arr: Float32Array): [number, number] => {
-    let max = 0;
-    for (const v of arr) max = Math.max(max, v);
-    const th = max * 0.08;
-    let a = 0;
-    let b = arr.length - 1;
-    while (a < b && arr[a] < th) a++;
-    while (b > a && arr[b] < th) b--;
-    return [a, b];
-  };
-  let [x0, x1] = span(cols);
-  let [y0, y1] = span(rows);
-  const ok = count > w * h * 0.12 && count < w * h * 0.97;
-  if (!ok) {
-    x0 = Math.round(w * 0.14);
-    x1 = Math.round(w * 0.86);
-    y0 = Math.round(h * 0.1);
-    y1 = Math.round(h * 0.9);
-  } else {
-    // 背景を透明にする（服の色で下塗りした上に重ねる）
-    for (let i = 0; i < mask.length; i++) if (!mask[i]) img.data[i * 4 + 3] = 0;
-    sctx.putImageData(img, 0, 0);
+  if (!mask) {
+    const m = garmentMask(img);
+    if (plausible(m, w, h)) mask = m;
   }
-  const bw = Math.max(4, x1 - x0 + 1);
-  const bh = Math.max(4, y1 - y0 + 1);
+  const ok = !!mask;
+  const plan = planSwatches(img, mask, kind);
+  const [x0, x1, y0, y1] = plan.box;
+  const bw = x1 - x0 + 1;
+  const bh = y1 - y0 + 1;
 
-  // 服の範囲を枠いっぱいに（縦横比は服の形＝3Dの側で決まるので、ここでは合わせない）。
-  // 模様が細かく残るように元の写真から切り出し、背景は小さいほうで作ったマスクで透明にする
-  const whole = document.createElement("canvas");
-  whole.width = 512;
-  whole.height = 640;
-  const cut = document.createElement("canvas");
-  cut.width = whole.width;
-  cut.height = whole.height;
+  // 1枚貼る用：服の範囲を枠いっぱいに（縦横比は服の形＝3Dの側で決まるので、ここでは合わせない）。
+  // 模様が細かく残るように元の写真から切り出し、背景は透明にしてから、まわりの服の色で埋める
+  const whole = canvasOf(512, 640);
+  const cut = canvasOf(whole.width, whole.height);
   const cctx = cut.getContext("2d")!;
   cctx.imageSmoothingQuality = "high";
-  cctx.drawImage(
-    bmp,
-    x0 / k,
-    y0 / k,
-    bw / k,
-    bh / k,
-    0,
-    0,
-    cut.width,
-    cut.height,
-  );
-  if (ok) {
-    cctx.globalCompositeOperation = "destination-in";
-    cctx.drawImage(small, x0, y0, bw, bh, 0, 0, cut.width, cut.height);
-  }
-  const wctx = whole.getContext("2d")!;
-  wctx.fillStyle = color;
-  wctx.fillRect(0, 0, whole.width, whole.height);
+  cctx.drawImage(bmp, x0 / k, y0 / k, bw / k, bh / k, 0, 0, cut.width, cut.height);
+  const wctx = whole.getContext("2d", { willReadFrequently: true })!;
   wctx.imageSmoothingQuality = "high";
   if (ok) {
+    // 切り抜きのふちには背景が 1 画素ほどまざるので、少し内側で切る
+    const edge = erode(mask!, w, h, 1);
+    const mc = canvasOf(w, h);
+    const mctx = mc.getContext("2d")!;
+    const md = mctx.createImageData(w, h);
+    for (let i = 0; i < edge.length; i++) md.data[i * 4 + 3] = edge[i] ? 255 : 0;
+    mctx.putImageData(md, 0, 0);
+    cctx.globalCompositeOperation = "destination-in";
+    cctx.drawImage(mc, x0, y0, bw, bh, 0, 0, cut.width, cut.height);
     // 列ごとに、服が写っている上端〜下端を枠の高さいっぱいに伸ばす。
-    // すその丸みやえりのくぼみで空く部分（下塗りの色）が出ないようにする
-    const [top, bottom] = columnSpans(mask, w, x0, x1, y0, y1);
+    // すその丸みやえりのくぼみで空く部分が出ないようにする。
+    // ただし、服の高さの 4 分の 3 より短い列（ワンピースのすその広がり・袖）は伸ばさない（模様が縦に流れて見えるため）。
+    // 空いたところは、あとでまわりの服の色で埋める
+    const [top, bottom] = columnSpans(mask!, w, x0, x1, y0, y1);
     for (let dx = 0; dx < whole.width; dx++) {
       const X = Math.min(x1, x0 + Math.floor(((dx + 0.5) / whole.width) * bw));
+      const span = bottom[X - x0] - top[X - x0] + 1;
+      if (span < bh * 0.75) {
+        wctx.drawImage(cut, dx, 0, 1, cut.height, dx, 0, 1, whole.height);
+        continue;
+      }
       const sy = ((top[X - x0] - y0) / bh) * cut.height;
-      const sh = ((bottom[X - x0] - top[X - x0] + 1) / bh) * cut.height;
+      const sh = (span / bh) * cut.height;
       wctx.drawImage(cut, dx, sy, 1, sh, dx, 0, 1, whole.height);
     }
-  } else wctx.drawImage(cut, 0, 0);
-  const bodyU = ok ? bodyRange(mask, w, x0, x1, y0, y1) : undefined;
+    // ふちの半透明のところは背景の色がまざっているので、透明にしてから埋める（服のまわりに白いふちが出ないように）
+    const data = wctx.getImageData(0, 0, whole.width, whole.height);
+    for (let i = 3; i < data.data.length; i += 4) data.data[i] = data.data[i] >= 240 ? 255 : 0;
+    pushPullFill(data.data, whole.width, whole.height);
+    wctx.putImageData(data, 0, 0);
+  } else {
+    wctx.fillStyle = color;
+    wctx.fillRect(0, 0, whole.width, whole.height);
+    wctx.drawImage(cut, 0, 0);
+  }
 
-  const swatch = document.createElement("canvas");
-  swatch.width = swatch.height = 128;
-  const side = Math.min(bw, bh) * 0.32;
-  // 生地の見本は、服がいちばんしっかり写っている四角から取る（パンツの股の間や靴の間の床を避ける）。
-  // 同じくらいなら真ん中の少し左（ボタンやファスナーを避ける）を選ぶ
-  const [cx, cy] = ok
-    ? swatchCenter(mask, w, x0, x1, y0, y1, side)
-    : [(x0 + x1) / 2 - bw * 0.12, y0 + bh * 0.3];
-  swatch
-    .getContext("2d")!
-    .drawImage(
+  // 生地の見本が見つからない（切り抜きに失敗した）ときは、服の範囲の左上寄りの四角
+  const short = Math.min(bw, bh);
+  const bodySq = plan.body ?? {
+    cx: (x0 + x1) / 2 - bw * 0.12,
+    cy: y0 + bh * 0.3,
+    side: short * 0.3,
+    mean: undefined,
+  };
+  const sleeveSq = plan.sleeve;
+  const swatchOf = (sq: { cx: number; cy: number; side: number }) => {
+    const c = canvasOf(128, 128);
+    const ctx = c.getContext("2d", { willReadFrequently: true })!;
+    ctx.imageSmoothingQuality = "high";
+    ctx.drawImage(
       bmp,
-      (cx - side / 2) / k,
-      (cy - side / 2) / k,
-      side / k,
-      side / k,
+      (sq.cx - sq.side / 2) / k,
+      (sq.cy - sq.side / 2) / k,
+      sq.side / k,
+      sq.side / k,
       0,
       0,
       128,
       128,
     );
+    // 光のむらをならす（折り返して並べたときに、ひし形の模様が出ないように）
+    const d = ctx.getImageData(0, 0, 128, 128);
+    flattenLight(d.data, 128, 18);
+    ctx.putImageData(d, 0, 0);
+    return c;
+  };
+  const swatch = swatchOf(bodySq);
+  const sleeve = sleeveSq ? swatchOf(sleeveSq) : undefined;
   bmp.close();
-  // 地の色：生地の見本の範囲の平均（背景は除く）
-  let tone: string | undefined;
-  if (ok) {
-    let r = 0;
-    let gSum = 0;
-    let b = 0;
-    let c = 0;
-    for (
-      let y = Math.max(0, Math.floor(cy - side / 2));
-      y < Math.min(h, cy + side / 2);
-      y++
-    )
-      for (
-        let x = Math.max(0, Math.floor(cx - side / 2));
-        x < Math.min(w, cx + side / 2);
-        x++
-      ) {
-        const i = y * w + x;
-        if (!mask[i]) continue;
-        r += img.data[i * 4];
-        gSum += img.data[i * 4 + 1];
-        b += img.data[i * 4 + 2];
-        c++;
-      }
-    if (c > 0)
-      tone = `#${[r, gSum, b]
-        .map((v) =>
-          Math.round(v / c)
-            .toString(16)
-            .padStart(2, "0"),
-        )
-        .join("")}`;
-  }
+  // 地の色：生地の見本の平均（背景は除く）
+  const hex = (c: number[]) =>
+    `#${c
+      .map((v) =>
+        Math.round(Math.min(255, Math.max(0, v)))
+          .toString(16)
+          .padStart(2, "0"),
+      )
+      .join("")}`;
+  const tone = ok && bodySq.mean ? hex(bodySq.mean) : undefined;
   const tex = (c: HTMLCanvasElement) => {
     const t = new THREE.CanvasTexture(c);
     t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
     return t;
   };
-  return { whole: tex(whole), swatch: tex(swatch), bodyU, tone };
-}
-
-/** 一辺 side の四角のうち、服の写っている割合が高く、真ん中の少し左に近いものの中心 */
-function swatchCenter(
-  mask: Uint8Array,
-  w: number,
-  x0: number,
-  x1: number,
-  y0: number,
-  y1: number,
-  side: number,
-): [number, number] {
-  const half = side / 2;
-  const px = (x0 + x1) / 2 - (x1 - x0) * 0.12;
-  const py = (y0 + y1) / 2;
-  const reach = Math.max(x1 - x0, y1 - y0) || 1;
-  let best: [number, number] = [px, py];
-  let bestScore = -Infinity;
-  const steps = 9;
-  for (let i = 0; i < steps; i++)
-    for (let j = 0; j < steps; j++) {
-      const cx = x0 + half + ((x1 - x0 - side) * i) / (steps - 1);
-      const cy = y0 + half + ((y1 - y0 - side) * j) / (steps - 1);
-      let inside = 0;
-      let total = 0;
-      for (let y = Math.ceil(cy - half); y < cy + half; y += 2)
-        for (let x = Math.ceil(cx - half); x < cx + half; x += 2) {
-          total++;
-          if (mask[y * w + x]) inside++;
-        }
-      const cover = total ? inside / total : 0;
-      const near = 1 - Math.hypot(cx - px, cy - py) / reach;
-      const score = cover * 4 + near;
-      if (score > bestScore) {
-        bestScore = score;
-        best = [cx, cy];
-      }
-    }
-  return best;
-}
-
-/**
- * 列ごとの、服が写っている上端と下端（行番号）。細すぎる列（ハンガーの残りなど）はとなりの列の値を使い、
- * 全体を少しならして段差を消す。
- */
-function columnSpans(
-  mask: Uint8Array,
-  w: number,
-  x0: number,
-  x1: number,
-  y0: number,
-  y1: number,
-): [Float32Array, Float32Array] {
-  const n = x1 - x0 + 1;
-  const top = new Float32Array(n).fill(NaN);
-  const bottom = new Float32Array(n).fill(NaN);
-  const minSpan = (y1 - y0 + 1) * 0.3;
-  for (let x = x0; x <= x1; x++) {
-    let a = -1;
-    let b = -1;
-    for (let y = y0; y <= y1; y++)
-      if (mask[y * w + x]) {
-        if (a < 0) a = y;
-        b = y;
-      }
-    if (a >= 0 && b - a + 1 >= minSpan) {
-      top[x - x0] = a;
-      bottom[x - x0] = b;
-    }
-  }
-  // 値のない列は、いちばん近い値のある列から
-  const fill = (arr: Float32Array, fallback: number) => {
-    let last = NaN;
-    for (let i = 0; i < n; i++) {
-      if (!Number.isNaN(arr[i])) last = arr[i];
-      else if (!Number.isNaN(last)) arr[i] = last;
-    }
-    last = NaN;
-    for (let i = n - 1; i >= 0; i--) {
-      if (!Number.isNaN(arr[i])) last = arr[i];
-      else arr[i] = Number.isNaN(last) ? fallback : last;
-    }
+  return {
+    whole: tex(whole),
+    swatch: tex(swatch),
+    sleeve: sleeve && tex(sleeve),
+    bodyU: ok ? plan.bodyU : undefined,
+    tone,
+    tile: plan.refPx > 0 ? bodySq.side / plan.refPx : undefined,
+    sleeveTile: sleeveSq && plan.refPx > 0 ? sleeveSq.side / plan.refPx : undefined,
   };
-  fill(top, y0);
-  fill(bottom, y1);
-  const smooth = (arr: Float32Array) => {
-    const out = new Float32Array(n);
-    const r = 3;
-    for (let i = 0; i < n; i++) {
-      let sum = 0;
-      let c = 0;
-      for (let d = -r; d <= r; d++) {
-        const j = i + d;
-        if (j < 0 || j >= n) continue;
-        sum += arr[j];
-        c++;
-      }
-      out[i] = sum / c;
-    }
-    return out;
-  };
-  return [smooth(top), smooth(bottom)];
-}
-
-/**
- * 写真の横方向のうち胴が写っている範囲（0〜1）。
- * 列ごとに服が写っている高さを数え、真ん中から見て高さが半分以上ある列を胴とみなす（袖は低いので外れる）。
- */
-function bodyRange(
-  mask: Uint8Array,
-  w: number,
-  x0: number,
-  x1: number,
-  y0: number,
-  y1: number,
-): [number, number] {
-  const cols = new Float32Array(x1 - x0 + 1);
-  for (let x = x0; x <= x1; x++) {
-    let c = 0;
-    for (let y = y0; y <= y1; y++) if (mask[y * w + x]) c++;
-    cols[x - x0] = c;
-  }
-  let max = 0;
-  for (const c of cols) max = Math.max(max, c);
-  const th = max * 0.55;
-  const mid = Math.floor(cols.length / 2);
-  let a = mid;
-  let b = mid;
-  while (a > 0 && cols[a - 1] >= th) a--;
-  while (b < cols.length - 1 && cols[b + 1] >= th) b++;
-  const u0 = a / cols.length;
-  const u1 = (b + 1) / cols.length;
-  // 胴がほとんど見つからない（細すぎる）ときは全体を使う
-  if (u1 - u0 < 0.3) return [0, 1];
-  return [u0, u1];
 }
 
 const paints = new WeakMap<Blob, Promise<Omit<Paint, "color">>>();
@@ -516,7 +196,9 @@ function paintFor(g: Garment): Promise<Paint> {
   const color = COLORS[g.color].hex;
   let p = paints.get(g.photo);
   if (!p) {
-    p = garmentTextures(g.photo, color).catch(() => ({}));
+    const kind: PhotoKind =
+      g.category === "shoes" ? "shoes" : g.category === "bottoms" ? "lower" : "upper";
+    p = garmentTextures(g.photo, color, { kind }).catch(() => ({}));
     paints.set(g.photo, p);
   }
   return p.then((t) => ({ ...t, color }));
@@ -533,7 +215,7 @@ export async function buildScene(
   items: Garment[],
   scale = 1,
   profile: Profile = {},
-  opts: { warp?: boolean } = {},
+  opts: { warp?: boolean; shoeModel?: boolean } = {},
 ): Promise<THREE.Scene> {
   const scene = new THREE.Scene();
   scene.add(new THREE.HemisphereLight("#ffffff", "#b9ad9f", 0.7));
@@ -578,15 +260,24 @@ export async function buildScene(
   scene.add(blob);
 
   const fig = await prepareFigure(scan, profile, opts);
+  // 靴の3Dの型（スニーカー・革靴）。読み込めないときは足の形から作る
+  if (opts.shoeModel !== false && items.some((g) => g.category === "shoes"))
+    fig.shoe = await loadShoe().catch(() => undefined);
   const person = new THREE.Group();
+  const shoes = items.find((g) => g.category === "shoes");
+  const shoeShape = shoes && lookShape(shoes);
   person.add(
-    buildBody(fig, { shoes: items.some((g) => g.category === "shoes") }),
+    buildBody(fig, {
+      shoes: shoeShape?.kind === "shoes" ? shoeShape.style : undefined,
+    }),
   );
   const sorted = [...items].sort(
     (a, b) => ORDER.indexOf(a.category) - ORDER.indexOf(b.category),
   );
+  // 下に着るものから順に着せ、上に着る服は下の服より外へ出す
+  const layers = new Layers(fig.fit.marks.torsoCz);
   for (const g of sorted)
-    person.add(buildGarment(fig, lookShape(g), await paintFor(g)));
+    person.add(buildGarment(fig, lookShape(g), await paintFor(g), layers));
   person.scale.setScalar(scale);
   scene.add(person);
   return scene;

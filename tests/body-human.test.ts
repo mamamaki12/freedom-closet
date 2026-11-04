@@ -119,7 +119,10 @@ describe("服の切り出し", () => {
         expect(finite(pos)).toBe(true);
         expect(finite(uv)).toBe(true);
         expect(finite(nrm)).toBe(true);
-        expect(p.geometry.groups.length).toBe(2);
+        // 材質の区分は 前（写真1枚）・背中など（生地の見本）・袖（袖の見本）の 3 つで、面をすべて含む
+        expect(p.geometry.groups.length).toBe(3);
+        const faces = p.geometry.groups.reduce((a, g) => a + g.count, 0);
+        expect(faces).toBe(p.geometry.getIndex()!.count);
       }
     }
     // 上下に分かれる服は 2 枚

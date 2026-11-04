@@ -3,9 +3,12 @@
 import * as THREE from "three";
 import type { LookShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
-import { garmentPieces, underwear, type UvMode } from "./garments";
+import { garmentPieces, Layers, underwear, type UvMode } from "./garments";
 import { fitHuman, loadHuman, type Fitted, type Human, type V3 } from "./human";
+import { fitShoe, shoeLift, shoeMaterial, type ShoeAsset } from "./shoe";
 import type { BodyScan } from "./types";
+
+export { Layers };
 
 export { THREE };
 
@@ -13,6 +16,8 @@ export { THREE };
 export interface Figure {
   human: Human;
   fit: Fitted;
+  /** 靴の3Dの型（読み込めたときだけ。ないときは足の形から作る） */
+  shoe?: ShoeAsset;
 }
 
 export async function prepareFigure(
@@ -37,10 +42,18 @@ export interface Paint {
   whole?: THREE.Texture;
   /** 生地を敷き詰める模様（袖・パンツ用） */
   swatch?: THREE.Texture;
+  /** 袖の生地の見本（袖の色が胴とはっきり違う服だけ。なければ swatch を使う） */
+  sleeve?: THREE.Texture;
   /** whole の横方向のうち、胴（袖を除いた部分）が写っている範囲 */
   bodyU?: [number, number];
   /** 写真から取った地の色（生地の見本の平均）。靴など模様を貼らないものに使う */
   tone?: string;
+  /**
+   * 生地の見本の一辺が、写真の中の基準の幅（トップスは胴の幅、ボトムスは腰の幅）の何倍か。
+   * 3Dでも同じ割合で敷き詰めて、前（写真）と背中・袖（見本）の模様の大きさをそろえる
+   */
+  tile?: number;
+  sleeveTile?: number;
 }
 
 const SKIN = new THREE.MeshStandardMaterial({
@@ -56,8 +69,16 @@ const UNDER = new THREE.MeshStandardMaterial({
 });
 
 /** 布の材質。sheen で布らしいやわらかな光り方にする */
-export function fabric(paint: Paint, kind: UvMode): THREE.MeshPhysicalMaterial {
-  const base = kind === "whole" ? paint.whole : paint.swatch;
+export function fabric(
+  paint: Paint,
+  kind: UvMode | "sleeve",
+): THREE.MeshPhysicalMaterial {
+  const base =
+    kind === "whole"
+      ? paint.whole
+      : kind === "sleeve"
+        ? (paint.sleeve ?? paint.swatch)
+        : paint.swatch;
   let map: THREE.Texture | undefined;
   if (base) {
     map = base.clone();
@@ -69,14 +90,16 @@ export function fabric(paint: Paint, kind: UvMode): THREE.MeshPhysicalMaterial {
       map.wrapS = map.wrapT = THREE.MirroredRepeatWrapping;
     }
   }
+  // 布のつやは生地の色にする（白いつやだと、黒や紺の服が白っぽくかすんで見える）
   return new THREE.MeshPhysicalMaterial({
     color: map ? "#ffffff" : paint.color,
     map,
     roughness: 0.92,
     metalness: 0,
-    sheen: 0.45,
+    sheen: 0.6,
     sheenRoughness: 0.85,
-    sheenColor: new THREE.Color("#ffffff"),
+    sheenColor: new THREE.Color(map ? "#ffffff" : paint.color),
+    sheenColorMap: map ?? null,
     side: THREE.DoubleSide,
   });
 }
@@ -92,18 +115,43 @@ function geometryOf(
   return g;
 }
 
+/** 本物の靴の3Dの型を使う靴の種類（ほかは足の形から作る） */
+const ASSET_SHOES: ReadonlySet<ShoeStyle> = new Set(["sneakers", "leather"]);
+
+function usesShoeAsset(fig: Figure, style: ShoeStyle): boolean {
+  return !!fig.shoe && ASSET_SHOES.has(style);
+}
+
 /** マネキン本体（肌・目・下着がわりの薄い一枚）。靴をはくときは足を少し小さくして靴から出ないようにする */
-export function buildBody(fig: Figure, opts: { shoes: boolean }): THREE.Group {
+export function buildBody(fig: Figure, opts: { shoes?: ShoeStyle }): THREE.Group {
   const { human, fit } = fig;
   const g = new THREE.Group();
   const pos = new Float32Array(fit.body);
   if (opts.shoes) {
     const m = fit.marks;
+    const asset = usesShoeAsset(fig, opts.shoes);
+    const feet = asset ? [measureFoot(fig, -1), measureFoot(fig, 1)] : [];
     for (let i = 0; i < pos.length / 3; i++) {
       if (human.body.parts[i * 4 + 2] < 0.5) continue;
       const y = pos[i * 3 + 1];
-      const f = m.foot[pos[i * 3] < 0 ? 0 : 1];
-      if (y > f.ankle[1] + 0.012) continue;
+      const s = pos[i * 3] < 0 ? 0 : 1;
+      const f = m.foot[s];
+      const top = f.ankle[1] + 0.012;
+      if (y > top) continue;
+      if (asset) {
+        // 靴の型は足の形どおりではないので、足を細く・低く・少し短くして、靴の中（底より上）に収める。
+        // 足首の上でもとの形になめらかにつなぐ（靴の履き口から見えるところ）
+        const fs = feet[s];
+        const w = smoothstep((top - y) / 0.02);
+        const t = (pos[i * 3 + 2] - fs.heelZ) / Math.max(1e-3, fs.toeZ - fs.heelZ);
+        const cx = footAt(fs, t).cx;
+        pos[i * 3] = cx + (pos[i * 3] - cx) * (1 - 0.25 * w);
+        // 足の裏は靴底の上へ（革靴は底が薄いので低めに）
+        const sole = opts.shoes === "leather" ? 0.006 : 0.012;
+        pos[i * 3 + 1] = y * (1 - 0.25 * w) + sole * w;
+        pos[i * 3 + 2] = f.ankle[2] + (pos[i * 3 + 2] - f.ankle[2]) * (1 - 0.08 * w);
+        continue;
+      }
       const k = 0.9;
       pos[i * 3] = f.ankle[0] + (pos[i * 3] - f.ankle[0]) * k;
       pos[i * 3 + 1] = y * 0.92 + 0.004;
@@ -509,6 +557,20 @@ function buildShoes(
 ): THREE.Group {
   const g = new THREE.Group();
   const style = shape.style;
+  if (fig.shoe && usesShoeAsset(fig, style)) {
+    // スニーカー・革靴は本物の靴の3Dの型を、足の長さ・幅・向きに合わせて置く（革靴は底を薄く、表面を革に）
+    const look = style === "leather" ? "leather" : "sneakers";
+    const mat = shoeMaterial(fig.shoe, paint.tone ?? paint.color, look);
+    for (const side of [-1, 1] as const) {
+      const m = new THREE.Mesh(
+        fitShoe(fig.shoe.model, measureFoot(fig, side), side, shoeLift(look)),
+        mat,
+      );
+      m.castShadow = true;
+      g.add(m);
+    }
+    return g;
+  }
   const spec = shoeSpec(style);
   // 色は写真から取った地の色（なければ登録した色）。生地の模様を貼ると靴はまだらに見えるので貼らない
   const base = new THREE.Color(paint.tone ?? paint.color);
@@ -677,15 +739,26 @@ export function buildGarment(
   fig: Figure,
   shape: LookShape,
   paint: Paint,
+  layers?: Layers,
 ): THREE.Group {
   if (shape.kind === "shoes") return buildShoes(fig, shape, paint);
   const g = new THREE.Group();
-  for (const piece of garmentPieces(fig.human, fig.fit, shape, {
-    bodyU: paint.bodyU,
-  })) {
+  for (const piece of garmentPieces(
+    fig.human,
+    fig.fit,
+    shape,
+    {
+      bodyU: paint.bodyU,
+      tile: paint.tile,
+      sleeveTile: paint.sleeveTile ?? paint.tile,
+    },
+    layers,
+  )) {
+    // 材質は 0: 前（写真1枚）、1: 背中・パンツなど（生地の見本）、2: 袖（袖の見本）
     const mesh = new THREE.Mesh(piece.geometry, [
       fabric(paint, piece.body),
       fabric(paint, "swatch"),
+      fabric(paint, "sleeve"),
     ]);
     mesh.castShadow = true;
     g.add(mesh);

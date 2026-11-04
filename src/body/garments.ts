@@ -42,8 +42,127 @@ export function vertexNormals(
   return n;
 }
 
+/** となりの頂点の一覧（面の辺から）。i のとなりは adj[start[i]] 〜 adj[start[i + 1] - 1]（重なりあり） */
+export function neighbors(index: ArrayLike<number>, n: number): { start: Int32Array; adj: Int32Array } {
+  const start = new Int32Array(n + 1);
+  for (let f = 0; f < index.length; f++) start[index[f] + 1] += 2;
+  for (let i = 0; i < n; i++) start[i + 1] += start[i];
+  const adj = new Int32Array(start[n]);
+  const fill = start.slice(0, n);
+  for (let f = 0; f < index.length; f += 3)
+    for (let e = 0; e < 3; e++) {
+      const a = index[f + e];
+      const b = index[f + ((e + 1) % 3)];
+      adj[fill[a]++] = b;
+      adj[fill[b]++] = a;
+    }
+  return { start, adj };
+}
+
+/** 法線をとなりの頂点と平均して、なめらかにする（times 回） */
+export function smoothNormals(
+  normals: Float32Array,
+  index: ArrayLike<number>,
+  times: number,
+): Float32Array {
+  const n = normals.length / 3;
+  const { start: deg, adj } = neighbors(index, n);
+  let cur = normals;
+  for (let t = 0; t < times; t++) {
+    const next = new Float32Array(cur.length);
+    for (let i = 0; i < n; i++) {
+      let x = cur[i * 3];
+      let y = cur[i * 3 + 1];
+      let z = cur[i * 3 + 2];
+      for (let q = deg[i]; q < deg[i + 1]; q++) {
+        const j = adj[q];
+        x += cur[j * 3];
+        y += cur[j * 3 + 1];
+        z += cur[j * 3 + 2];
+      }
+      const l = Math.hypot(x, y, z) || 1;
+      next[i * 3] = x / l;
+      next[i * 3 + 1] = y / l;
+      next[i * 3 + 2] = z / l;
+    }
+    cur = next;
+  }
+  return cur;
+}
+
 /** 模様の貼り方：whole は写真を1枚そのまま、swatch は生地の模様を敷き詰める */
 export type UvMode = "whole" | "swatch";
+export type Group = 0 | 1 | 2;
+
+/** 0→1→0 と行って戻る（輪のまわりの角度 0〜1 を、継ぎ目のない座標にする） */
+export const tent = (a: number) => 1 - Math.abs(2 * (((a % 1) + 1) % 1) - 1);
+
+/**
+ * 重ね着：すでに着た服のいちばん外側を、胴の軸のまわりの角度と高さの区画ごとに覚えておき、
+ * 上に着る服をそれより外へ出す（シャツのすそからスカートが突き抜けて見えないように）。腕は含めない。
+ */
+export class Layers {
+  private static readonly SECT = 40;
+  private static readonly YB = 100;
+  private r = new Float32Array(Layers.SECT * Layers.YB);
+  constructor(private axisZ: (y: number) => number) {}
+
+  private cell(x: number, y: number, z: number): [number, number, number] {
+    const dz = z - this.axisZ(y);
+    const sec =
+      ((Math.floor(((Math.atan2(dz, x) / (Math.PI * 2)) + 0.5) * Layers.SECT) % Layers.SECT) +
+        Layers.SECT) %
+      Layers.SECT;
+    const yb = clamp(Math.floor(y * Layers.YB), 0, Layers.YB - 1);
+    return [sec, yb, Math.hypot(x, dz)];
+  }
+
+  /** p の頂点 verts を、すでに着た服より gap だけ外へ出す */
+  push(p: Float32Array, verts: Iterable<number>, gap = 0.003): void {
+    const S = Layers.SECT;
+    for (const i of verts) {
+      const x = p[i * 3];
+      const y = p[i * 3 + 1];
+      const z = p[i * 3 + 2];
+      const [sec, yb, r] = this.cell(x, y, z);
+      let need = 0;
+      for (const d of [-1, 0, 1]) need = Math.max(need, this.r[yb * S + ((sec + d + S) % S)]);
+      if (need <= 0 || r >= need + gap || r < 1e-5) continue;
+      const k = (need + gap) / r;
+      const cz = this.axisZ(y);
+      p[i * 3] = x * k;
+      p[i * 3 + 2] = cz + (z - cz) * k;
+    }
+  }
+
+  /** 着た服の面を覚える（三角形の中も細かく調べて、すき間を作らない） */
+  add(pos: Float32Array, index: ArrayLike<number>, use: (v: number) => boolean): void {
+    const S = Layers.SECT;
+    const mark = (x: number, y: number, z: number) => {
+      const [sec, yb, r] = this.cell(x, y, z);
+      const j = yb * S + sec;
+      if (r > this.r[j]) this.r[j] = r;
+    };
+    const N = 4;
+    for (let f = 0; f < index.length; f += 3) {
+      const a = index[f];
+      const b = index[f + 1];
+      const c = index[f + 2];
+      if (!use(a) || !use(b) || !use(c)) continue;
+      for (let u = 0; u <= N; u++)
+        for (let v = 0; u + v <= N; v++) {
+          const wa = u / N;
+          const wb = v / N;
+          const wc = 1 - wa - wb;
+          mark(
+            pos[a * 3] * wa + pos[b * 3] * wb + pos[c * 3] * wc,
+            pos[a * 3 + 1] * wa + pos[b * 3 + 1] * wb + pos[c * 3 + 1] * wc,
+            pos[a * 3 + 2] * wa + pos[b * 3 + 2] * wb + pos[c * 3 + 2] * wc,
+          );
+        }
+    }
+  }
+}
 
 export interface CutSpec {
   /** 0以上なら残す。負なら切る（切り口に寄せる） */
@@ -52,19 +171,26 @@ export interface CutSpec {
   project: (i: number, p: V3) => V3;
   /** 体からの離れ具合（頂点ごと） */
   ease: (i: number) => number;
-  /** 面がどちらの材質か（0: 本体＝写真1枚、1: 袖など＝生地の模様） */
-  group: (i: number) => 0 | 1;
-  /** 生地の模様の座標（group 1 の頂点）。[0,1) の角度と、長さ方向 */
-  swatchUv: (i: number) => [number, number];
+  /** 面がどの材質か（0: 前＝写真1枚、1: 背中・パンツなど＝生地の見本、2: 袖＝袖の見本） */
+  group: (i: number) => Group;
+  /**
+   * 生地の見本の座標（group 1・2 の頂点）。見本1枚ぶんが 1。
+   * 見本は折り返して敷き詰めるので、輪になったところ（腕・脚のまわり）は
+   * 行って戻る座標（tent）にして、座標が飛ぶところ（継ぎ目の筋）を作らない
+   */
+  swatchUv: (i: number, g: Group) => [number, number];
   /** 垂らす処理（ゆとりをつけたあと、切る前） */
   drape?: (p: Float32Array) => void;
   /** 本体（group 0）の頂点の範囲を写真のどこに当てるか [u0, v0, u1, v1]。省略時は写真全体 */
   photoRect?: [number, number, number, number];
+  /** 重ね着（下に着た服より外へ出し、この服も覚える）。torso は腕でない頂点 */
+  layers?: Layers;
+  torso?: (i: number) => boolean;
 }
 
 /**
  * メッシュから服を切り出す。面は3つの頂点のうち1つでも残るなら残し、切られた頂点は切り口に寄せる。
- * 返す geometry には材質グループが2つある（0: 本体、1: 袖・脚）。
+ * 返す geometry には材質グループが3つある（0: 前、1: 背中・脚、2: 袖）。
  */
 export function cutPiece(
   mesh: HumanMesh,
@@ -72,7 +198,9 @@ export function cutPiece(
   spec: CutSpec,
 ): THREE.BufferGeometry | undefined {
   const n = pos.length / 3;
-  const normals = vertexNormals(pos, mesh.index);
+  // ゆとりは法線の向きに足すが、法線はならしてから使う（おしりの割れ目や脇の下のような狭い谷では、
+  // 両側の法線が向かい合っていて、そのまま足すと両側の面が交差して折れ目やすき間になる）
+  const normals = smoothNormals(vertexNormals(pos, mesh.index), mesh.index, 4);
   const p = new Float32Array(pos.length);
   for (let i = 0; i < n; i++) {
     const e = spec.ease(i);
@@ -81,12 +209,19 @@ export function cutPiece(
     p[i * 3 + 2] = pos[i * 3 + 2] + normals[i * 3 + 2] * e;
   }
   spec.drape?.(p);
+  if (spec.layers) {
+    const torso: number[] = [];
+    for (let i = 0; i < n; i++) if (!spec.torso || spec.torso(i)) torso.push(i);
+    spec.layers.push(p, torso);
+  }
   const keep = new Float32Array(n);
   for (let i = 0; i < n; i++) keep[i] = spec.keep(i);
   const idx = mesh.index;
-  const faces: [number[], number[]] = [[], []];
-  const used = new Int32Array(n).fill(-1);
+  const nb = neighbors(idx, n);
+  const faces: [number[], number[], number[]] = [[], [], []];
   const projected = new Set<number>();
+  const groups = new Uint8Array(n);
+  for (let i = 0; i < n; i++) groups[i] = spec.group(i);
   for (let f = 0; f < idx.length; f += 3) {
     const a = idx[f];
     const b = idx[f + 1];
@@ -97,23 +232,43 @@ export function cutPiece(
     for (const v of [a, b, c]) {
       if (keep[v] < 0 && !projected.has(v)) {
         projected.add(v);
+        // まず、残る頂点との辺の上の、切り口（keep が 0 になるところ）へ。
+        // 真上にずらすだけだと、すその下で細くなる体の形のまま内側へ折れ込む（すその内側にひだができる）
+        let best = -1;
+        let bt = -1;
+        for (let q = nb.start[v]; q < nb.start[v + 1]; q++) {
+          const j = nb.adj[q];
+          if (keep[j] < 0) continue;
+          const t = keep[j] / (keep[j] - keep[v]);
+          if (t > bt) {
+            bt = t;
+            best = j;
+          }
+        }
+        if (best >= 0)
+          for (let e = 0; e < 3; e++)
+            p[v * 3 + e] = p[best * 3 + e] + (p[v * 3 + e] - p[best * 3 + e]) * bt;
         const q = spec.project(v, [p[v * 3], p[v * 3 + 1], p[v * 3 + 2]]);
         p[v * 3] = q[0];
         p[v * 3 + 1] = q[1];
         p[v * 3 + 2] = q[2];
       }
     }
-    const g = spec.group(a) + spec.group(b) + spec.group(c) >= 2 ? 1 : 0;
+    // 面の材質は、3つの頂点のうち多いほう（ばらばらなら1つめの頂点）
+    const ga = groups[a];
+    const gb = groups[b];
+    const gc = groups[c];
+    const g = (gb === gc ? gb : ga) as Group;
     faces[g].push(a, b, c);
   }
-  const all = [...faces[0], ...faces[1]];
+  const all = [...faces[0], ...faces[1], ...faces[2]];
   if (all.length === 0) return undefined;
   // 材質の境目の頂点は材質ごとに別の頂点にする（写真の座標と模様の座標が混ざってギザギザにならないように）。
   // 法線は切る前のメッシュ全体から取り、継ぎ目や切り口で陰影が途切れないようにする
   const full = vertexNormals(p, idx);
-  const slot: [Int32Array, Int32Array] = [used, new Int32Array(n).fill(-1)];
+  const slot = [0, 1, 2].map(() => new Int32Array(n).fill(-1));
   let count = 0;
-  for (const g of [0, 1] as const)
+  for (const g of [0, 1, 2] as const)
     for (const v of faces[g]) if (slot[g][v] < 0) slot[g][v] = count++;
   const outPos = new Float32Array(count * 3);
   const outNrm = new Float32Array(count * 3);
@@ -134,7 +289,7 @@ export function cutPiece(
   const w = Math.max(1e-3, maxX - minX);
   const h = Math.max(1e-3, maxY - minY);
   const [u0, v0, u1, v1] = spec.photoRect ?? [0, 0, 1, 1];
-  for (const g of [0, 1] as const) {
+  for (const g of [0, 1, 2] as const) {
     for (let v = 0; v < n; v++) {
       const j = slot[g][v];
       if (j < 0) continue;
@@ -146,15 +301,22 @@ export function cutPiece(
         uv[j * 2] = u0 + ((p[v * 3] - minX) / w) * (u1 - u0);
         uv[j * 2 + 1] = v0 + ((p[v * 3 + 1] - minY) / h) * (v1 - v0);
       } else {
-        const [u, t] = spec.swatchUv(v);
+        const [u, t] = spec.swatchUv(v, g);
         uv[j * 2] = u;
         uv[j * 2 + 1] = t;
       }
     }
   }
   let k = 0;
-  for (const g of [0, 1] as const)
+  for (const g of [0, 1, 2] as const)
     for (const v of faces[g]) index[k++] = slot[g][v];
+  if (spec.layers) {
+    // 出力の頂点が、元のどの頂点か（腕かどうかを調べるため）
+    const src = new Int32Array(count);
+    for (const g of [0, 1, 2] as const)
+      for (let v = 0; v < n; v++) if (slot[g][v] >= 0) src[slot[g][v]] = v;
+    spec.layers.add(outPos, index, (j) => !spec.torso || spec.torso(src[j]));
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute("position", new THREE.BufferAttribute(outPos, 3));
   geo.setAttribute("normal", new THREE.BufferAttribute(outNrm, 3));
@@ -162,6 +324,7 @@ export function cutPiece(
   geo.setIndex(new THREE.BufferAttribute(index, 1));
   geo.addGroup(0, faces[0].length, 0);
   geo.addGroup(faces[0].length, faces[1].length, 1);
+  geo.addGroup(faces[0].length + faces[1].length, faces[2].length, 2);
   return geo;
 }
 
@@ -209,6 +372,162 @@ function drapeAround(
   }
 }
 
+/**
+ * 「橋をかける」：水平に輪切りにしたとき、布はくぼみ（背骨の溝・おしりの割れ目・胸の下）に入らず、
+ * 出っぱりから出っぱりへまっすぐ渡る。輪切りごとに凸包（輪ゴムをかけた形）を作り、その内側の頂点を外へ出す。
+ * 輪切りは上下に少し重ねて取り、頂点の少ない段でも形が欠けないようにする。
+ */
+function bridgeSlices(
+  p: Float32Array,
+  verts: number[],
+  axis: (y: number) => [number, number],
+  keepRatio: number,
+): number[] {
+  if (verts.length < 3) return [];
+  const order = [...verts].sort((a, b) => p[a * 3 + 1] - p[b * 3 + 1]);
+  const ys = order.map((i) => p[i * 3 + 1]);
+  const STEP = 0.005;
+  const HALF = 0.012;
+  const y0 = ys[0];
+  const y1 = ys[ys.length - 1];
+  // 段ごとの凸包（点は軸からの横 x・奥行き dz）
+  const hulls: [number, number][][] = [];
+  let lo = 0;
+  let hi = 0;
+  for (let k = 0; y0 + k * STEP <= y1 + STEP; k++) {
+    const yc = y0 + k * STEP;
+    while (lo < order.length && ys[lo] < yc - HALF) lo++;
+    while (hi < order.length && ys[hi] <= yc + HALF) hi++;
+    const pts: [number, number][] = [];
+    for (let q = lo; q < hi; q++) {
+      const i = order[q];
+      const [cx, cz] = axis(p[i * 3 + 1]);
+      pts.push([p[i * 3] - cx, p[i * 3 + 2] - cz]);
+    }
+    hulls.push(convexHull(pts));
+  }
+  const moved: [number, number, number][] = [];
+  for (const i of verts) {
+    const y = p[i * 3 + 1];
+    const hull = hulls[clamp(Math.round((y - y0) / STEP), 0, hulls.length - 1)];
+    if (hull.length < 3) continue;
+    const [cx, cz] = axis(y);
+    const dx = p[i * 3] - cx;
+    const dz = p[i * 3 + 2] - cz;
+    const r = Math.hypot(dx, dz);
+    if (r < 1e-6) continue;
+    const reach = rayToHull(hull, dx / r, dz / r);
+    if (reach * keepRatio > r) moved.push([i, cx + (dx / r) * reach * keepRatio, cz + (dz / r) * reach * keepRatio]);
+  }
+  // 計算し終えてから動かす（動かした点で次の凸包が変わらないように）
+  const out: number[] = [];
+  for (const [i, x, z] of moved) {
+    if (Math.hypot(p[i * 3] - x, p[i * 3 + 2] - z) > 0.002) out.push(i);
+    p[i * 3] = x;
+    p[i * 3 + 2] = z;
+  }
+  return out;
+}
+
+/**
+ * 大きく動かした頂点を、まわりの（動かしていない）頂点のあいだに膜を張るようにならす。
+ * くぼみの壁を外へ押し出すと、壁の面どうしが重なって裏返ることがあるので、それをほどく。
+ * 体（ゆとりをつけた面）より内側には戻さない。
+ */
+function relax(
+  p: Float32Array,
+  verts: number[],
+  nb: { start: Int32Array; adj: Int32Array },
+  axis: (y: number) => [number, number],
+  times: number,
+) {
+  if (!verts.length) return;
+  const floor = new Float32Array(verts.length);
+  verts.forEach((i, q) => {
+    const [cx, cz] = axis(p[i * 3 + 1]);
+    floor[q] = Math.hypot(p[i * 3] - cx, p[i * 3 + 2] - cz);
+  });
+  const next = new Float32Array(verts.length * 3);
+  for (let t = 0; t < times; t++) {
+    verts.forEach((i, q) => {
+      let x = 0;
+      let y = 0;
+      let z = 0;
+      let c = 0;
+      for (let k = nb.start[i]; k < nb.start[i + 1]; k++) {
+        const j = nb.adj[k];
+        x += p[j * 3];
+        y += p[j * 3 + 1];
+        z += p[j * 3 + 2];
+        c++;
+      }
+      if (!c) {
+        next[q * 3] = p[i * 3];
+        next[q * 3 + 1] = p[i * 3 + 1];
+        next[q * 3 + 2] = p[i * 3 + 2];
+        return;
+      }
+      next[q * 3] = x / c;
+      next[q * 3 + 1] = y / c;
+      next[q * 3 + 2] = z / c;
+    });
+    verts.forEach((i, q) => {
+      let x = next[q * 3];
+      const y = next[q * 3 + 1];
+      let z = next[q * 3 + 2];
+      const [cx, cz] = axis(y);
+      const r = Math.hypot(x - cx, z - cz);
+      if (r < floor[q] && r > 1e-6) {
+        x = cx + ((x - cx) / r) * floor[q];
+        z = cz + ((z - cz) / r) * floor[q];
+      }
+      p[i * 3] = x;
+      p[i * 3 + 1] = y;
+      p[i * 3 + 2] = z;
+    });
+  }
+}
+
+/** 平面の点の凸包（反時計回り） */
+function convexHull(pts: [number, number][]): [number, number][] {
+  if (pts.length < 3) return pts;
+  const a = [...pts].sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const cross = (o: [number, number], p: [number, number], q: [number, number]) =>
+    (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  const lower: [number, number][] = [];
+  for (const p of a) {
+    while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+    lower.push(p);
+  }
+  const upper: [number, number][] = [];
+  for (let i = a.length - 1; i >= 0; i--) {
+    const p = a[i];
+    while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+    upper.push(p);
+  }
+  lower.pop();
+  upper.pop();
+  return lower.concat(upper);
+}
+
+/** 原点から向き (ux, uz) に進んで凸包のふちに着くまでの距離（原点が外なら 0） */
+function rayToHull(hull: [number, number][], ux: number, uz: number): number {
+  let best = 0;
+  for (let k = 0; k < hull.length; k++) {
+    const [ax, az] = hull[k];
+    const [bx, bz] = hull[(k + 1) % hull.length];
+    // 原点 + t*u = a + s*(b-a)
+    const ex = bx - ax;
+    const ez = bz - az;
+    const den = ux * ez - uz * ex;
+    if (Math.abs(den) < 1e-12) continue;
+    const t = (ax * ez - az * ex) / den;
+    const sPar = (ax * uz - az * ux) / den;
+    if (t > 0 && sPar >= -1e-6 && sPar <= 1 + 1e-6) best = Math.max(best, t);
+  }
+  return best;
+}
+
 /** 服1着ぶんの切り出し結果 */
 export interface Piece {
   geometry: THREE.BufferGeometry;
@@ -220,6 +539,10 @@ interface Ctx {
   human: Human;
   fit: Fitted;
   m: Marks;
+  /** 生地の見本1枚が3Dでどの長さになるか（身長＝1）。胴・脚用と袖用 */
+  tile: number;
+  sleeveTile: number;
+  layers?: Layers;
 }
 
 /** 胴の頂点（腕を除く）。belowY より下だけ */
@@ -282,6 +605,13 @@ function upperPiece(
   const sleeve = opts.sleeve;
   const isArm = (i: number) => mesh.parts[i * 4 + 1] >= 0.5;
   const neck = { drop: opts.neckDrop, front: opts.neckFront };
+  // 背中は写真の裏返しではなく生地の見本にする（前のプリントやボタンが背中に出ないように）
+  const isBack = (i: number) => pos[i * 3 + 2] < m.torsoCz(pos[i * 3 + 1]);
+  const armLen = Math.hypot(
+    m.wrist[0][0] - m.shoulder[0][0],
+    m.wrist[0][1] - m.shoulder[0][1],
+    m.wrist[0][2] - m.shoulder[0][2],
+  );
   const spec: CutSpec = {
     keep: (i) => {
       const y = pos[i * 3 + 1];
@@ -322,28 +652,40 @@ function upperPiece(
       return q;
     },
     ease: (i) => (isArm(i) ? opts.ease * 0.85 : opts.ease),
-    group: (i) => (opts.swatchBody ? 1 : isArm(i) ? 1 : 0),
-    swatchUv: (i) => {
-      const k = aux.armK[i];
-      if (k >= 0) return [aux.armAngle[i] * 2, k * 4];
-      const y = pos[i * 3 + 1];
-      const a =
-        Math.atan2(pos[i * 3 + 2] - m.torsoCz(y), pos[i * 3]) / (Math.PI * 2) +
-        0.5;
-      return [a * 3, y * 6];
+    group: (i) => (isArm(i) ? 2 : opts.swatchBody || isBack(i) ? 1 : 0),
+    swatchUv: (i, g) => {
+      if (g === 2) {
+        // 腕のまわり（上腕は太く、手首は細い）と、肩からの長さ。
+        // 肩の丸み（腕の付け根より上、k が負）もそのまま長さにする（0 でそろえると模様が筋に伸びる）
+        const k = aux.armK[i];
+        const around = lerp(0.18, 0.13, clamp(k, 0, 1));
+        return [
+          (tent(aux.armAngle[i]) * around) / 2 / ctx.sleeveTile,
+          (k * armLen) / ctx.sleeveTile,
+        ];
+      }
+      // 背中：後ろから見た平面に貼る
+      return [pos[i * 3] / ctx.tile, pos[i * 3 + 1] / ctx.tile];
     },
     drape: opts.drape
-      ? (p) =>
+      ? (p) => {
+          const verts = torsoVerts(mesh, pos, aux, m.shoulderY);
+          const axis = (y: number): [number, number] => [0, m.torsoCz(y)];
+          const moved = bridgeSlices(p, verts, axis, 0.995);
+          relax(p, moved, neighbors(mesh.index, pos.length / 3), axis, 12);
           drapeAround(
             p,
-            torsoVerts(mesh, pos, aux, m.chestY + 0.02),
-            (y) => [0, m.torsoCz(y)],
+            verts.filter((i) => pos[i * 3 + 1] < m.chestY + 0.02),
+            axis,
             m.chestY - 0.03,
             0.985,
             0.002,
-          )
+          );
+        }
       : undefined,
     photoRect: opts.photoRect,
+    layers: ctx.layers,
+    torso: (i) => !isArm(i),
   };
   const geometry = cutPiece(mesh, pos, spec);
   return geometry && { geometry, body: opts.swatchBody ? "swatch" : "whole" };
@@ -368,15 +710,12 @@ function skirtPiece(
     project: (_i, p) => [p[0], opts.hemY, p[2]],
     // 下に向かって少し広がる
     ease: (i) => opts.ease + Math.max(0, m.hipY - pos[i * 3 + 1]) * opts.flare,
-    group: () => (opts.swatchBody ? 1 : 0),
-    swatchUv: (i) => {
-      const y = pos[i * 3 + 1];
-      const a =
-        Math.atan2(pos[i * 3 + 2] - m.torsoCz(y), pos[i * 3]) / (Math.PI * 2) +
-        0.5;
-      return [a * 3, y * 6];
-    },
+    // 後ろ半分は生地の見本
+    group: (i) =>
+      opts.swatchBody || pos[i * 3 + 2] < m.torsoCz(pos[i * 3 + 1]) ? 1 : 0,
+    swatchUv: (i) => [pos[i * 3] / ctx.tile, pos[i * 3 + 1] / ctx.tile],
     photoRect: opts.photoRect,
+    layers: ctx.layers,
   };
   const geometry = cutPiece(mesh, pos, spec);
   return geometry && { geometry, body: opts.swatchBody ? "swatch" : "whole" };
@@ -419,13 +758,16 @@ function pantsPiece(
     ease: (i) => opts.ease(clamp(legT(i), 0, 1)),
     group: () => 1,
     swatchUv: (i) => {
-      const t = legT(i);
+      const t = clamp(legT(i), 0, 1);
       const s = pos[i * 3] < 0 ? 0 : 1;
       const y = pos[i * 3 + 1];
       const [cx, cz] = legAxis(s)(y);
-      const a =
-        Math.atan2(pos[i * 3 + 2] - cz, pos[i * 3] - cx) / (Math.PI * 2) + 0.5;
-      return [a * 2, (t > -8 ? t : 0) * 5 + y * 0];
+      // 左右の脚で向きを鏡にして、まん中（前と後ろの縫い目）で座標がそろうようにする
+      const dx = (pos[i * 3] - cx) * (s === 1 ? -1 : 1);
+      const a = Math.atan2(pos[i * 3 + 2] - cz, dx) / (Math.PI * 2) + 0.5;
+      // 脚のまわり（太ももは太く、足首は細い）と、股からの長さ
+      const around = lerp(0.3, 0.2, t);
+      return [(tent(a) * around) / 2 / ctx.tile, (m.crotchY - y) / ctx.tile];
     },
     drape:
       opts.drape > 0
@@ -451,6 +793,8 @@ function pantsPiece(
             }
           }
         : undefined,
+    layers: ctx.layers,
+    torso: (i) => mesh.parts[i * 4 + 1] < 0.5,
   };
   const geometry = cutPiece(mesh, pos, spec);
   return geometry && { geometry, body: "swatch" };
@@ -493,10 +837,22 @@ export function garmentPieces(
   human: Human,
   fit: Fitted,
   shape: LookShape,
-  photo: { bodyU?: [number, number] } = {},
+  photo: { bodyU?: [number, number]; tile?: number; sleeveTile?: number } = {},
+  layers?: Layers,
 ): Piece[] {
-  const ctx: Ctx = { human, fit, m: fit.marks };
   const m = fit.marks;
+  // 生地の見本の大きさ：写真の中で見本が基準の幅（胴の幅、ボトムスは腰の幅）の何倍かを、3Dの同じ幅に掛ける
+  const lower = shape.kind === "pants" || shape.kind === "skirt";
+  const ref = lower ? m.torsoWidth(m.hipY) : m.torsoWidth(m.chestY);
+  const toTile = (f: number | undefined) => clamp((f ?? 0.3) * ref, 0.03, 0.2);
+  const ctx: Ctx = {
+    human,
+    fit,
+    m,
+    tile: toTile(photo.tile),
+    sleeveTile: toTile(photo.sleeveTile ?? photo.tile),
+    layers,
+  };
   const sleeveLen = (s: "none" | "short" | "long") =>
     s === "none" ? 0.04 : s === "short" ? 0.3 : 0.96;
   // 写真の横方向のうち胴に当たる範囲（袖を除いたところ）。写真がなければ全体
@@ -607,12 +963,20 @@ export function garmentPieces(
     }
     case "pants": {
       const to = shape.length === "short" ? 0.28 : 0.985;
-      const ease =
+      const base =
         shape.width === "wide"
           ? (t: number) => 0.01 + t * 0.014
           : shape.width === "slim"
             ? () => 0.004
             : (t: number) => 0.006 + t * 0.004;
+      // 長いパンツは、すそを少し広げて靴の履き口にかぶせる（靴の上に布が乗るように）
+      const ease =
+        to > 0.9
+          ? (t: number) => {
+              const u = clamp((t - 0.9) / (to - 0.9), 0, 1);
+              return base(t) + 0.007 * u * u * (3 - 2 * u);
+            }
+          : base;
       const piece = pantsPiece(ctx, {
         to,
         ease,
