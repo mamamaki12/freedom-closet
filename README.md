@@ -55,7 +55,7 @@ npm run build
 ### 端末内AIの言い方を変えたとき
 種類・柄の判定は、英語の説明文（`src/ai/local/classifier.ts` の `LABELS` など）を数値にしたもの（`src/ai/local/textEmbeddings.json`）と写真を比べて決める。
 説明文やひな型を変えたら `npm run ai:embeddings` で数値を作り直す（Hugging Face から文章側のモデルを取るので通信が必要。約254MB、初回だけ）。
-作り直し忘れは `npm test` で分かる。GitHub Actions の「AI check」は、実際のモデルで数値の一致と、公開データセットの服の写真での正解率（種類 約94%）を確かめる。
+作り直し忘れは `npm test` で分かる。GitHub Actions の「AI check」は、実際のモデルで数値の一致と、公開データセットの服の写真での正解率（種類 約96%）を確かめる。
 
 ## 構成
 ```
@@ -80,5 +80,5 @@ main に push すると `.github/workflows/pages.yml` が自動でビルドし�
 - Claude API を使う中継サーバーは Pages には含まれない（端末内AIはそのまま使える）
 
 ## 未確認のこと
-- 端末内AIの iPhone Safari での読込時間・メモリ（判定精度は公開データセットの服の写真713枚で種類の正解率 約94%。実機の写真での確認はまだ）
+- 端末内AIの iPhone Safari での読込時間・メモリ（判定精度は公開データセットの服の写真713枚で種類の正解率 約96%。実機の写真での確認はまだ）
 - GU の検索URL（`https://www.gu-global.com/jp/ja/search?q=`）が実際に開けるか
