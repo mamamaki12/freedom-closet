@@ -2,7 +2,7 @@
 // 写真には触らず、数字だけを返す。端末の外には何も送らない。
 import { bodyShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
-import type { BodyScan, LegSlice, TorsoSlice } from "./types";
+import type { BodyScan, LegSlice, ScanMarks, TorsoSlice } from "./types";
 
 /** 0〜1 の位置（画像の幅・高さに対する割合） */
 export interface Landmark {
@@ -99,6 +99,15 @@ class Img {
     const r = this.run(y, x);
     return r ? r[1] - r[0] : 0;
   }
+  /** y の上下 band 行の幅の中央値（1行だけだと、切り抜きのふちのぎざぎざで揺れるため） */
+  widthBand(y: number, x: number | ((y: number) => number), band: number) {
+    const ws: number[] = [];
+    for (let yy = Math.round(y) - band; yy <= Math.round(y) + band; yy++) {
+      const w = this.width(yy, typeof x === "number" ? x : x(yy));
+      if (w > 0) ws.push(w);
+    }
+    return median(ws);
+  }
   /** (x, y) を通り、向き (dx, dy) に直角な方向の人の部分の長さ（腕の太さなど） */
   across(x: number, y: number, dx: number, dy: number) {
     const len = Math.hypot(dx, dy) || 1;
@@ -128,13 +137,26 @@ class Img {
   }
 }
 
+function median(v: number[]) {
+  if (!v.length) return 0;
+  const s = [...v].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
+
 const mid = (a: { x: number; y: number }, b: { x: number; y: number }) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
 const dist = (a: { x: number; y: number }, b: { x: number; y: number }) => Math.hypot(a.x - b.x, a.y - b.y);
 
 /** 正面の写真から測ったもの（身長を1とした割合） */
-export type FrontMeasure = Omit<BodyScan, "version" | "at" | "views"> & {
+export type FrontMeasure = Omit<BodyScan, "version" | "at" | "views" | "marks"> & {
   /** 腕が体についていて、胴の幅が正しく測れなかった */
   armsTouching: boolean;
+  marks: ScanMarks;
+  /**
+   * 骨格の点の高さ（横の写真で同じ高さを探すのに使う）と、胸（わきの下）の高さ。
+   * chestA は肩の点(0)〜腰の点(1)の割合
+   */
+  ref: { shoulderY: number; hipY: number; kneeY: number; ankleY: number; chestA: number };
 };
 
 const REQUIRED = [P.nose, P.lShoulder, P.rShoulder, P.lHip, P.rHip, P.lKnee, P.rKnee, P.lAnkle, P.rAnkle];
@@ -167,6 +189,14 @@ function checkStanding(im: Img) {
   }
 }
 
+/**
+ * 採寸の目安を測る高さ。肩の点(0)から腰の点(1)までの割合。
+ * 実在の人の体型データ BodyM（2018人）で、巻き尺の実測値といちばんよく合う高さを選んだ。
+ */
+export const MARK_LEVELS = { waist: 0.65, hip: 0.95 };
+/** 太もも：腰の点(0)からひざ(1)まで、ふくらはぎ：ひざ(0)から足首(1)までの割合 */
+export const LEG_MARK_LEVELS = { thigh: 0.5, calf: 0.35 };
+
 export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
   checkVisible(lm, REQUIRED);
   const im = new Img(mask, lm);
@@ -190,14 +220,21 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
   const ny = (y: number) => (y - top) / H;
   const nw = (w: number) => w / H;
   const cx = (y: number) => lerp(sh.x, hip.x, clamp((y - sh.y) / (hip.y - sh.y), 0, 1.3));
+  // 幅は上下に少し幅をもたせた帯の中央値で測る（身長の約0.4%）
+  const band = Math.max(1, Math.round(H * 0.004));
+  /** 肩の点(0)〜腰の点(1)の割合の高さ */
+  const at = (a: number) => sh.y + a * (hip.y - sh.y);
 
   // 頭：あごは鼻と肩のあいだの半分くらい
   const chin = lerp(nose.y, sh.y, 0.5);
   const headH = chin - top;
   const headW = im.width(nose.y, nose.x) || headH * 0.75;
 
-  // 肩：点は肩の関節なので、外側の幅はそれより少し広い
-  const shoulderW = dist(ls, rs) * 1.22;
+  // 肩：肩の点の高さで、体の外側どうしの幅を切り抜きから測る（BodyM で、骨格の点の間隔より実測とよく合った）。
+  // 腕を横に上げていて腕まで測ってしまったときなどは、点の間隔から見積もる（切り抜きの幅は点の間隔の約1.34倍）
+  const jointW = dist(ls, rs);
+  const silW = im.widthBand(sh.y, sh.x, band);
+  const shoulderW = silW > jointW * 1.1 && silW < jointW * 1.6 ? silW : jointW * 1.34;
 
   // 股：腰から下へ、脚のあいだにすき間が出るところ。ただし太ももの内側がくっついていると
   // すき間は本当の股より下に出るので、腰とひざの点から見積もった高さより下にはしない
@@ -222,13 +259,13 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
     return y <= pe.y ? lerp(ps.x, pe.x, (y - ps.y) / (pe.y - ps.y)) : lerp(pe.x, pw.x, (y - pe.y) / (pw.y - pe.y));
   };
   const arms = [armX(P.lShoulder, P.lElbow, P.lWrist), armX(P.rShoulder, P.rElbow, P.rWrist)];
-  // わきの下：肩から下へ、胴と腕のあいだにすき間が出る高さ。それより上は肩なので、腕が重なって見えるのは当たり前
-  const elbowY = Math.max(im.p(P.lElbow).y, im.p(P.rElbow).y);
+  // わきの下：肩から下へ、胴と腕のあいだにすき間が出る高さと、そこでの胴の端。
+  // それより上は肩なので、腕が重なって見えるのは当たり前
   const armpits = arms.map((arm) => {
-    for (let y = Math.round(sh.y) + 1; y < elbowY; y++) {
+    for (let y = Math.round(sh.y) + 1; y < hip.y; y++) {
       const x = arm(y);
       const r = im.run(y, cx(y));
-      if (x !== undefined && r && (x < r[0] || x > r[1])) return y;
+      if (x !== undefined && r && (x < r[0] || x > r[1])) return { y, edge: x < r[0] ? r[0] : r[1] };
     }
     return undefined;
   });
@@ -237,13 +274,13 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
     // いちばん下は股のすぐ上（股の高さだと片脚しか測れない）
     const y = lerp(torsoTop, crotch - H * 0.012, i / (TORSO_LEVELS - 1));
     const r = im.run(y, cx(y));
-    let w = r ? r[1] - r[0] : 0;
+    let w = r ? im.widthBand(y, cx, band) : 0;
     let above = false;
     arms.forEach((arm, side) => {
       const x = arm(y);
       if (!r || x === undefined || x < r[0] || x > r[1]) return;
       const pit = armpits[side];
-      if (pit !== undefined && y < pit) {
+      if (pit !== undefined && y < pit.y) {
         above = true;
         return;
       }
@@ -255,9 +292,13 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
     aboveArmpit.push(above);
     torso.push({ y: ny(y), width: nw(w), depth: 0 });
   }
-  // わきの下より上は肩の幅まで測ってしまうので、わきの下の高さの胸の幅にそろえる
-  const chest = torso.find((_, i) => !aboveArmpit[i]);
-  if (chest) torso.forEach((t, i) => aboveArmpit[i] && (t.width = chest.width));
+  // 胸：わきの下の、左右の胴の端どうしの幅。見つからなければ肩と腰の点のあいだの6割の高さの幅
+  const [lp, rp] = armpits;
+  const chestA = lp && rp ? ((lp.y + rp.y) / 2 - sh.y) / (hip.y - sh.y) : 0.6;
+  const chestW = lp && rp && Math.abs(rp.edge - lp.edge) > 0 ? Math.abs(rp.edge - lp.edge) : im.widthBand(at(0.6), cx, band);
+  // わきの下より上は肩の幅まで測ってしまうので、胸の幅にそろえる
+  const chestSlice = torso.find((_, i) => !aboveArmpit[i]);
+  torso.forEach((t, i) => aboveArmpit[i] && (t.width = lp && rp ? nw(chestW) : (chestSlice?.width ?? t.width)));
   // 急に細くなるところは、股や腕のすき間を拾ったものなので、ひとつ上の幅を使う
   for (let i = 1; i < torso.length; i++) if (torso[i].width < torso[i - 1].width * 0.75) torso[i].width = torso[i - 1].width;
 
@@ -267,10 +308,8 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
   const lc = center(lh, lk, la);
   const rc = center(rh, rk, ra);
   const ankleY = mid(la, ra).y;
-  const legs: LegSlice[] = [];
-  for (let i = 0; i < LEG_LEVELS; i++) {
-    const t = i / (LEG_LEVELS - 1);
-    const y = lerp(crotch + (ankleY - crotch) * 0.03, ankleY, t);
+  /** 左右の脚の太さの平均（1行） */
+  const legWidth = (y: number) => {
     const widths = [lc, rc].map((c, side) => {
       const r = im.run(y, c(y));
       if (!r) return 0;
@@ -283,7 +322,14 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
       return r[1] - r[0];
     });
     const ok = widths.filter((w) => w > 0);
-    legs.push({ t, width: nw(ok.length ? ok.reduce((a, b) => a + b) / ok.length : 0), depth: 0 });
+    return ok.length ? ok.reduce((a, b) => a + b) / ok.length : 0;
+  };
+  const legBand = (y: number) => median([...Array(band * 2 + 1)].map((_, j) => legWidth(Math.round(y) - band + j)).filter((w) => w > 0));
+  const legs: LegSlice[] = [];
+  for (let i = 0; i < LEG_LEVELS; i++) {
+    const t = i / (LEG_LEVELS - 1);
+    const y = lerp(crotch + (ankleY - crotch) * 0.03, ankleY, t);
+    legs.push({ t, width: nw(legBand(y)), depth: 0 });
   }
 
   // 腕
@@ -315,11 +361,28 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
     legs,
     arm: { length: nw(armLen), upper: armWidth(0, 1, 0.4, 0.05), wrist: armWidth(1, 2, 0.85, 0.032) },
     armsTouching,
+    marks: {
+      chest: { y: ny(at(chestA)), width: nw(chestW) },
+      waist: { y: ny(at(MARK_LEVELS.waist)), width: nw(im.widthBand(at(MARK_LEVELS.waist), cx, band)) },
+      hip: { y: ny(at(MARK_LEVELS.hip)), width: nw(im.widthBand(at(MARK_LEVELS.hip), cx, band)) },
+      thigh: nw(legBand(lerp(hip.y, kneeY, LEG_MARK_LEVELS.thigh))),
+      calf: nw(legBand(lerp(kneeY, ankleY, LEG_MARK_LEVELS.calf))),
+      shoulder: nw(shoulderW),
+    },
+    ref: { shoulderY: ny(sh.y), hipY: ny(hip.y), kneeY: ny(kneeY), ankleY: ny(ankleY), chestA },
   };
 }
 
-/** 横の写真から、胴と脚の厚みを測る。高さは正面で測った位置に合わせる */
-export function measureSide(mask: Mask, lm: Landmark[], front: FrontMeasure): { torso: number[]; legs: number[]; head: number } {
+/** 横の写真から測った厚み（身長を1とした割合）。高さは正面で測った位置に、骨格の点で合わせる */
+export interface SideMeasure {
+  torso: number[];
+  legs: number[];
+  head: number;
+  marks?: { chest: number; waist: number; hip: number };
+}
+
+/** 横の写真から、胴と脚の厚みを測る */
+export function measureSide(mask: Mask, lm: Landmark[], front: FrontMeasure): SideMeasure {
   // 横向きだと片側の点は隠れるので、見えているほうを使う
   const pick = (a: number, b: number) => ((lm[a]?.visibility ?? 1) >= (lm[b]?.visibility ?? 1) ? a : b);
   const s = pick(P.lShoulder, P.rShoulder);
@@ -332,26 +395,50 @@ export function measureSide(mask: Mask, lm: Landmark[], front: FrontMeasure): { 
   const top = im.top(nose.x, nose.y);
   const H = im.bottom() - top;
   if (H < im.photoH * 0.3) throw new ScanError("体が小さく写っています。頭から足先までが画面いっぱいになるように撮ってください");
-  const Y = (n: number) => top + n * H;
+  const band = Math.max(1, Math.round(H * 0.004));
   const sp = im.p(s);
   const hp = im.p(h);
   const kp = im.p(k);
   const ap = im.p(a);
   const cx = (y: number) => lerp(sp.x, hp.x, clamp((y - sp.y) / (hp.y - sp.y), 0, 1.3));
-  // どちらも身長を1にしているので、同じ割合の高さで測る
-  const fy = Y;
-  const torso = front.torso.map((sl) => im.width(fy(sl.y), cx(fy(sl.y))) / H);
+  // 正面の高さ（身長を1とした割合）を、横の写真の行に移す。頭から足までの割合で移すと、
+  // 髪の毛の盛り上がりや足の写り方で数%ずれるので、肩・腰・ひざ・足首の点を目印にして合わせる
+  // （BodyM の実測で、ヒップの合い方がよくなった）
+  const r = front.ref;
+  const marks: [number, number][] = [
+    [r.shoulderY, sp.y],
+    [r.hipY, hp.y],
+    [r.kneeY, kp.y],
+    [r.ankleY, ap.y],
+  ];
+  const fy = (y: number) => {
+    let i = 0;
+    while (i < marks.length - 2 && y > marks[i + 1][0]) i++;
+    const [[y0, s0], [y1, s1]] = [marks[i], marks[i + 1]];
+    return s0 + ((y - y0) / (y1 - y0 || 1)) * (s1 - s0);
+  };
+  const depthAt = (y: number) => im.widthBand(fy(y), cx, band) / H;
+  const torso = front.torso.map((sl) => depthAt(sl.y));
   const legX = (y: number) => (y < kp.y ? lerp(hp.x, kp.x, (y - hp.y) / (kp.y - hp.y)) : lerp(kp.x, ap.x, (y - kp.y) / (ap.y - kp.y)));
-  const crotch = fy(front.crotchY);
   const legs = front.legs.map((l) => {
-    const y = lerp(crotch, ap.y, l.t);
-    return im.width(y, legX(y)) / H;
+    const y = fy(lerp(front.crotchY, front.ankleY, l.t));
+    return im.widthBand(y, legX, band) / H;
   });
-  return { torso, legs, head: im.width(Y(front.head.height * 0.55), nose.x) / H };
+  const atA = (frac: number) => r.shoulderY + frac * (r.hipY - r.shoulderY);
+  return {
+    torso,
+    legs,
+    head: im.width(top + front.head.height * 0.55 * H, nose.x) / H,
+    marks: {
+      chest: depthAt(atA(r.chestA)),
+      waist: depthAt(atA(MARK_LEVELS.waist)),
+      hip: depthAt(atA(MARK_LEVELS.hip)),
+    },
+  };
 }
 
 /** 正面（と横）の測定から体型を作る。横がなければ厚みは幅から見積もる */
-export function buildScan(front: FrontMeasure, side?: ReturnType<typeof measureSide>, at = Date.now()): BodyScan {
+export function buildScan(front: FrontMeasure, side?: SideMeasure, at = Date.now()): BodyScan {
   const n = front.torso.length;
   const torso = front.torso.map((sl, i) => {
     const guess = sl.width * lerp(0.68, 0.8, i / (n - 1));
@@ -366,6 +453,9 @@ export function buildScan(front: FrontMeasure, side?: ReturnType<typeof measureS
     return { ...l, depth: d && d > l.width * 0.6 ? Math.min(d, l.width * 1.15) : l.width * 1.05 };
   });
   const headDepth = side?.head && side.head > front.head.width * 0.8 && side.head < front.head.width * 1.6 ? side.head : front.head.depth;
+  // 横の厚みも、ありえない値（腕の重なりなど）は使わない
+  const depth = (w: number, d?: number) => (d && d > w * 0.45 && d < w * 1.3 ? d : undefined);
+  const m = front.marks;
   return sane({
     version: 1,
     at,
@@ -379,6 +469,12 @@ export function buildScan(front: FrontMeasure, side?: ReturnType<typeof measureS
     legGap: front.legGap,
     legs,
     arm: front.arm,
+    marks: {
+      ...m,
+      chest: { ...m.chest, depth: depth(m.chest.width, side?.marks?.chest) },
+      waist: { ...m.waist, depth: depth(m.waist.width, side?.marks?.waist) },
+      hip: { ...m.hip, depth: depth(m.hip.width, side?.marks?.hip) },
+    },
   });
 }
 
@@ -388,18 +484,29 @@ export function buildScan(front: FrontMeasure, side?: ReturnType<typeof measureS
  */
 export function sane(s: BodyScan): BodyScan {
   const head = { width: clamp(s.head.width, 0.07, 0.13), height: clamp(s.head.height, 0.11, 0.17), depth: clamp(s.head.depth, 0.08, 0.15) };
+  const tw = (v: number) => clamp(v, 0.1, 0.36);
+  const td = (v?: number) => (v === undefined ? undefined : clamp(v, 0.07, 0.3));
+  const lw = (v: number) => clamp(v, 0.03, 0.17);
   return {
     ...s,
     head,
     // 首は、腕や髪とつながって太く測れることがある
     neck: { y: clamp(s.neck.y, head.height * 0.9, 0.2), width: clamp(s.neck.width, head.width * 0.45, head.width * 0.8) },
     shoulder: { y: clamp(s.shoulder.y, 0.15, 0.24), width: clamp(s.shoulder.width, 0.17, 0.34) },
-    torso: s.torso.map((t) => ({ y: t.y, width: clamp(t.width, 0.1, 0.36), depth: clamp(t.depth, 0.07, 0.3) })),
+    torso: s.torso.map((t) => ({ y: t.y, width: tw(t.width), depth: td(t.depth)! })),
     crotchY: clamp(s.crotchY, 0.42, 0.6),
     ankleY: clamp(s.ankleY, 0.9, 0.98),
     legGap: clamp(s.legGap, 0.05, 0.16),
-    legs: s.legs.map((l) => ({ t: l.t, width: clamp(l.width, 0.03, 0.17), depth: clamp(l.depth, 0.03, 0.18) })),
+    legs: s.legs.map((l) => ({ t: l.t, width: lw(l.width), depth: clamp(l.depth, 0.03, 0.18) })),
     arm: { length: clamp(s.arm.length, 0.25, 0.4), upper: clamp(s.arm.upper, 0.03, 0.09), wrist: clamp(s.arm.wrist, 0.02, 0.05) },
+    marks: s.marks && {
+      chest: { y: s.marks.chest.y, width: tw(s.marks.chest.width), depth: td(s.marks.chest.depth) },
+      waist: { y: s.marks.waist.y, width: tw(s.marks.waist.width), depth: td(s.marks.waist.depth) },
+      hip: { y: s.marks.hip.y, width: tw(s.marks.hip.width), depth: td(s.marks.hip.depth) },
+      thigh: lw(s.marks.thigh),
+      calf: lw(s.marks.calf),
+      shoulder: clamp(s.marks.shoulder, 0.17, 0.34),
+    },
   };
 }
 

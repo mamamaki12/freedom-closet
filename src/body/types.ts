@@ -37,4 +37,30 @@ export interface BodyScan {
   legs: LegSlice[];
   /** 腕の長さ（肩から手首）と太さ（上腕・手首） */
   arm: { length: number; upper: number; wrist: number };
+  /** 採寸の目安（胸囲など）を出すために、写真で直接測った値。古い保存データにはない */
+  marks?: ScanMarks;
+}
+
+/** 胴の決まった高さで測った幅と、横の写真があれば厚み（身長を1とした割合） */
+export interface MarkSlice {
+  /** 頭のてっぺん(0)から床(1)までの位置 */
+  y: number;
+  width: number;
+  depth?: number;
+}
+
+/**
+ * 写真で直接測った、採寸の目安のもとになる値（身長を1とした割合）。
+ * 高さは骨格の点で決める：胸はわきの下、ウエストは肩と腰の点のあいだの65%、ヒップは95%の高さ。
+ */
+export interface ScanMarks {
+  chest: MarkSlice;
+  waist: MarkSlice;
+  hip: MarkSlice;
+  /** 太もも（腰とひざの点の中間）の片脚の幅 */
+  thigh: number;
+  /** ふくらはぎ（ひざから足首までの35%）の片脚の幅 */
+  calf: number;
+  /** 肩の点の高さでの体の外側どうしの幅 */
+  shoulder: number;
 }

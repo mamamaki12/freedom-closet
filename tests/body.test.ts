@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildScan, defaultScan, fitClothes, measureFront, sane, ScanError, type Landmark, type Mask } from "../src/body/measure";
+import { buildScan, defaultScan, fitClothes, measureFront, measureSide, sane, ScanError, type Landmark, type Mask } from "../src/body/measure";
+import { calibrateScan, estimateSizes } from "../src/body/sizes";
 
 // 400x1000 の画像に、棒人間のような体の切り抜きを描く（身長 900px：y=50〜950）
 const W = 400;
@@ -73,6 +74,58 @@ describe("measureFront", () => {
   });
 });
 
+describe("measureFront の採寸の目安（marks）", () => {
+  it("胸はわきの下の胴の幅、ウエスト・ヒップは肩と腰の点のあいだの決まった高さで測る", () => {
+    const { mask, lm } = person({ waist: 160 });
+    const m = measureFront(mask, lm);
+    expect(m.marks.chest.width).toBeCloseTo(160 / 900, 2);
+    expect(m.marks.waist.width).toBeCloseTo(160 / 900, 2);
+    expect(m.marks.hip.width).toBeCloseTo(160 / 900, 2);
+    // ウエストは 肩(215)→腰(480) の65%、ヒップは95%の高さ
+    expect(m.marks.waist.y).toBeCloseTo((215 + 0.65 * 265 - 50) / 900, 2);
+    expect(m.marks.hip.y).toBeCloseTo((215 + 0.95 * 265 - 50) / 900, 2);
+    expect(m.marks.thigh).toBeCloseTo(50 / 900, 2);
+    expect(m.marks.calf).toBeCloseTo(50 / 900, 2);
+  });
+});
+
+// 横向きの体：厚み100px、おなか（y=360〜420）だけ140px。上に髪のまとめ髪（高さ60px）があり、頭から足までの割合ではずれる
+function sidePerson(): { mask: Mask; lm: Landmark[] } {
+  const data = new Float32Array(W * H);
+  const fill = (x0: number, x1: number, y0: number, y1: number) => {
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) data[y * W + x] = 1;
+  };
+  fill(185, 215, 0, 60); // まとめ髪
+  fill(160, 240, 50, 170); // 頭
+  fill(185, 215, 170, 205); // 首
+  fill(150, 250, 205, 500); // 胴
+  fill(150, 290, 360, 420); // おなか
+  fill(165, 235, 500, 950); // 脚（重なって1本に見える）
+  const lm: Landmark[] = Array.from({ length: 33 }, () => ({ x: 0.5, y: 0.5, visibility: 0.99 }));
+  const set = (i: number, x: number, y: number) => (lm[i] = { x: x / W, y: y / H, visibility: 0.99 });
+  set(0, 230, 120);
+  for (const i of [11, 12]) set(i, 200, 215);
+  for (const i of [23, 24]) set(i, 200, 480);
+  for (const i of [25, 26]) set(i, 200, 700);
+  for (const i of [27, 28]) set(i, 200, 910);
+  for (const i of [29, 30, 31, 32]) set(i, 200, 950);
+  return { mask: { width: W, height: H, data }, lm };
+}
+
+describe("measureSide", () => {
+  it("横の写真の高さは、頭から足までの割合でなく骨格の点で合わせる（髪の盛り上がりでずれない）", () => {
+    const f = person();
+    const front = measureFront(f.mask, f.lm);
+    const sp = sidePerson();
+    const side = measureSide(sp.mask, sp.lm, front);
+    // ウエストの高さ（肩→腰の65% = y≈387）は、横の写真でもおなかの段に当たる
+    const Hs = 950 - 0; // 横の写真の頭のてっぺん（髪の上）から足の裏まで
+    expect(side.marks!.waist).toBeCloseTo(140 / Hs, 2);
+    // 胸（わきの下）はおなかより上
+    expect(side.marks!.chest).toBeCloseTo(100 / Hs, 2);
+  });
+});
+
 describe("buildScan", () => {
   it("横の写真がなければ、厚みは幅から見積もる", () => {
     const { mask, lm } = person();
@@ -134,5 +187,55 @@ describe("fitClothes（服を着た写真の分をさし引く）", () => {
     const r = fitClothes(coat, { fit: "mens" });
     expect(r.loose).toBe(false);
     expect(r.scan).toBe(coat);
+  });
+});
+
+describe("採寸の目安（estimateSizes）と3Dの体型の合わせ方（calibrateScan）", () => {
+  const profile = { heightCm: 170, weightKg: 62, fit: "mens" as const };
+  const scan = () => {
+    const { mask, lm } = person();
+    return buildScan(measureFront(mask, lm), undefined, 1);
+  };
+  it("身長がなければ目安は出さない。古い保存データ（写真で測った値がない）も出さない", () => {
+    expect(estimateSizes(scan(), { fit: "mens" })).toBeUndefined();
+    const { marks: _drop, ...old } = scan();
+    expect(estimateSizes(old, profile)).toBeUndefined();
+  });
+  it("胸囲・ウエスト・ヒップなどを cm で出し、人の体の範囲に収める", () => {
+    const sizes = estimateSizes(scan(), profile)!;
+    expect(sizes.map((s) => s.key)).toEqual(["chest", "waist", "hip", "thigh", "calf", "shoulder"]);
+    for (const s of sizes) {
+      expect(s.cm).toBeGreaterThan(20);
+      expect(s.cm).toBeLessThan(170);
+      expect(s.error).toBeGreaterThan(0);
+    }
+    const byKey = Object.fromEntries(sizes.map((s) => [s.key, s.cm]));
+    expect(byKey.hip).toBeGreaterThan(byKey.thigh);
+  });
+  it("写真で太く測れた人ほど、目安も大きい", () => {
+    const thin = estimateSizes(scan(), profile)!.find((s) => s.key === "waist")!.cm;
+    const p = person({ waist: 200 });
+    const wide = estimateSizes(buildScan(measureFront(p.mask, p.lm), undefined, 1), profile)!.find((s) => s.key === "waist")!.cm;
+    expect(wide).toBeGreaterThan(thin + 3);
+  });
+  it("体重が分からなければ、3Dの体型はそのまま", () => {
+    const s = scan();
+    expect(calibrateScan(s, { heightCm: 170, fit: "mens" })).toBe(s);
+  });
+  it("3Dの体型は、組み合わせた目安に向けて太さを少し直す（形の高さ・長さは変えない）", () => {
+    const s = scan();
+    const c = calibrateScan(s, profile);
+    expect(c.crotchY).toBe(s.crotchY);
+    expect(c.torso.map((t) => t.y)).toEqual(s.torso.map((t) => t.y));
+    c.torso.forEach((t, i) => {
+      const k = t.width / s.torso[i].width;
+      expect(k).toBeGreaterThanOrEqual(0.85);
+      expect(k).toBeLessThanOrEqual(1.15);
+      expect(t.depth / s.torso[i].depth).toBeCloseTo(k, 5);
+    });
+    // 腕の太さは身長・体重から（写真の腕の太さはほとんど当たらなかった）
+    expect(c.arm.upper).not.toBe(s.arm.upper);
+    expect(c.arm.upper * 170 * Math.PI).toBeGreaterThan(22);
+    expect(c.arm.upper * 170 * Math.PI).toBeLessThan(35);
   });
 });
