@@ -1,6 +1,6 @@
 // 体の写真（正面・横）から3Dの体型モデルを作る。写真は端末の中で読み取るだけで、保存も送信もしない。
 import { ArrowLeft, Check, Lock, RotateCcw, SkipForward } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Viewer3D } from "../body/Figure3D";
 import { buildScan, fitClothes, type FrontMeasure } from "../body/measure";
 import { calibrateScan } from "../body/sizes";
@@ -34,6 +34,13 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
   const [loose, setLoose] = useState(false);
   const scale = useMemo(() => bodyShape(profile).scale, [profile]);
 
+  // 写真を撮っている間に、読み取りの部品とモデル（約9MB）のダウンロードを進めておく
+  useEffect(() => {
+    import("../body/scan")
+      .then((m) => m.prepareBodyScan())
+      .catch(() => undefined);
+  }, []);
+
   // 写真で測った太さを身長・体重と組み合わせて直し、服を着て撮った分をさし引く（ゆったりした服なら、そう知らせる）
   function finish(raw: BodyScan) {
     const r = fitClothes(calibrateScan(raw, profile), profile);
@@ -42,8 +49,8 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
     setStep("done");
   }
 
-  async function read(files: FileList | null) {
-    const photo = files?.[0];
+  async function read(files: File[]) {
+    const photo = files[0];
     if (!photo) return;
     setBusy(true);
     setError(undefined);
@@ -119,7 +126,7 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
       {step === "done" && scan && (
         <>
           <div className="scan-result">
-            <Viewer3D scan={scan} items={[]} scale={scale} />
+            <Viewer3D scan={scan} items={[]} scale={scale} profile={profile} />
           </div>
           <p className="hint">
             {scan.views.includes("side") ? "正面と横向きの写真から作りました。" : "正面の写真から作りました（体の厚みは見積もりです）。"}

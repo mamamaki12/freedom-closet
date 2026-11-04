@@ -1,6 +1,6 @@
 import type { GarmentAnalysis, Pattern } from "../../domain/types";
 import type { AnalyzeOptions, ClosetAI, OutfitInput, PurchaseInput } from "../types";
-import { classifyGarment, DEFAULT_LOCAL_MODEL, type Classified } from "./classifier";
+import { classifyGarment, DEFAULT_LOCAL_MODEL, prepareClassifier, type Classified } from "./classifier";
 import { extractPalette, readPixels, type Palette } from "./color";
 import { suggestOutfitsLocal } from "./outfits";
 import { suggestPurchasesLocal } from "./purchases";
@@ -12,6 +12,11 @@ export class LocalAI implements ClosetAI {
   readonly sendsPhotosOffDevice = false;
 
   constructor(private readonly modelId: string = DEFAULT_LOCAL_MODEL) {}
+
+  /** 判定モデルの読み込みを先に始める（写真を選んでいる間にダウンロードを進めるため） */
+  prepare(): void {
+    prepareClassifier(this.modelId);
+  }
 
   async analyzeGarment(photo: Blob, options?: AnalyzeOptions): Promise<GarmentAnalysis> {
     const { data, width, height } = await readPixels(photo);
@@ -63,6 +68,7 @@ const PATTERN_MARGIN = 0.1;
 
 /**
  * 種類（CLIP）と色（画素）と柄（CLIP＋画素）を1つの判定にまとめる（純粋な計算なのでテストできる）。
+ * - 種類：1位が「服でないもの」（帽子・バッグなど）なら、種類は分からないと答えて選んでもらう
  * - 柄：CLIPが無地以外を無地よりはっきり高く出せばその柄。CLIPが無地と言っても画素が2色以上なら「柄もの」
  * - 2番目の色：画素で2色以上のときだけ入れる
  * - 確からしさ：同じ種類（カテゴリ）の候補の合計。柄ものは色の判定が揺れやすいので少し下げる
@@ -70,7 +76,6 @@ const PATTERN_MARGIN = 0.1;
 export function mergeAnalysis(classified: Classified, palette: Palette): GarmentAnalysis {
   const { types, patterns } = classified;
   const top = types[0];
-  const sameCategory = types.filter((r) => r.label.category === top.label.category).reduce((s, r) => s + r.score, 0);
 
   const solid = patterns.find((p) => p.pattern === "solid")?.score ?? 0;
   const bestPattern = patterns.find((p) => p.pattern !== "solid");
@@ -82,15 +87,21 @@ export function mergeAnalysis(classified: Classified, palette: Palette): Garment
   const [first, second] = palette.colors;
   const subColor = second && (palette.multiColor || pattern !== "solid") && second.name !== first.name ? second.name : undefined;
 
+  const candidates = types
+    .flatMap((r) => (r.label.category ? [{ category: r.label.category, subType: r.label.subType, score: r.score }] : []))
+    .slice(0, 5);
+  const base = { color: first.name, colorHex: first.hex, pattern, subColor, candidates };
+
+  if (!top.label.category) {
+    return {
+      ...base,
+      category: null,
+      subType: null,
+      confidence: 0,
+      warning: "服ではないもの（帽子やバッグなど）に見えました。服なら種類を選んでください。",
+    };
+  }
+  const sameCategory = types.filter((r) => r.label.category === top.label.category).reduce((s, r) => s + r.score, 0);
   const confidence = Math.min(1, sameCategory) * (pattern !== "solid" ? 0.85 : 1);
-  return {
-    category: top.label.category,
-    subType: top.label.subType,
-    color: first.name,
-    colorHex: first.hex,
-    pattern,
-    subColor,
-    confidence,
-    candidates: types.slice(0, 5).map((r) => ({ category: r.label.category, subType: r.label.subType, score: r.score })),
-  };
+  return { ...base, category: top.label.category, subType: top.label.subType, confidence };
 }

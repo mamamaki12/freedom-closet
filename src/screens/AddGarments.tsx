@@ -88,6 +88,9 @@ export function AddGarments({
     return () => ac.abort();
   }, []);
 
+  // 写真を選んでいる間に、判定モデルの読み込み（初回はダウンロード）を進めておく
+  useEffect(() => ai.prepare?.(), [ai]);
+
   const update = (key: string, patch: Partial<Item>) =>
     setItems((cur) => cur.map((it) => (it.key === key ? { ...it, ...patch } : it)));
 
@@ -131,8 +134,9 @@ export function AddGarments({
       });
   }, [items, ai]);
 
-  const addPhotos = (files: FileList | null) => {
-    if (files?.length) setItems((cur) => [...cur, ...toItems(files)]);
+  const addPhotos = (files: File[]) => {
+    const added = toItems(files);
+    setItems((cur) => [...cur, ...added]);
   };
   const remove = (key: string) => setItems((cur) => cur.filter((it) => it.key !== key));
 
@@ -247,7 +251,7 @@ function ChooseType({
         {url && <img className="choose-photo" src={url} alt="種類が分からなかった服" />}
         <div className="grow">
           <p>
-            {item.state === "failed" ? "うまく判定できませんでした。" : "種類だけ分かりませんでした。"}どれですか？
+            {item.state === "failed" ? "うまく判定できませんでした。" : item.analysis?.warning ?? "種類だけ分かりませんでした。"}どれですか？
             {rest > 0 && <span className="hint">（このあと{rest}枚）</span>}
           </p>
           <button className="btn ghost small" onClick={onRemove}>
@@ -273,8 +277,14 @@ function ChooseType({
  * 「撮る」と「アルバムから選ぶ」を分ける（capture を付けるとiPhoneでアルバムを選べないため）。
  * 最初は「カメラで撮る」を大きく、アルバムはその下に細く出す。登録画面の下では2つ並べて小さく出す。
  */
-export function PhotoPickers({ onPick, compact }: { onPick: (files: FileList | null) => void; compact?: boolean }) {
-  const pick = (e: React.ChangeEvent<HTMLInputElement>) => (onPick(e.target.files), (e.target.value = ""));
+export function PhotoPickers({ onPick, compact }: { onPick: (files: File[]) => void; compact?: boolean }) {
+  const pick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    // FileList は input の value を消すと空になるので、先に配列に写してから消す
+    // （setState の更新関数の中で読むと、もう空になっていて写真が足されないことがあった）
+    const files = e.target.files ? [...e.target.files] : [];
+    e.target.value = "";
+    if (files.length) onPick(files);
+  };
   return (
     <div className={compact ? "pickers compact" : "pickers stacked"}>
       <label className="picker camera">

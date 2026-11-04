@@ -44,6 +44,11 @@ function load(): Promise<PoseLandmarker> {
   return landmarker;
 }
 
+/** 画面を開いたら先に読み取りの準備（部品とモデルのダウンロード）を始める。失敗しても何もしない */
+export function prepareBodyScan(): void {
+  load().catch(() => undefined);
+}
+
 /**
  * 大きな写真は読み取り用に縮める（長辺 maxSide px）。
  * まわりに余白（写真のふちの色）を足す：人が端に近いと切り抜きがくるいやすいため。

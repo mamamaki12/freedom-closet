@@ -23,10 +23,10 @@ AIは `src/ai/types.ts` の `ClosetAI` という窓口に合わせて作って�
 
 | | 端末内AI（`local`） | Claude API（`claude`） |
 | --- | --- | --- |
-| 種類の判定 | Transformers.js＋CLIP（ゼロショット分類。1種類に複数の言い方を用意して合計） | Claudeが写真を見て判定（迷った候補も返す） |
+| 種類の判定 | Transformers.js＋CLIP（ゼロショット分類。1種類に複数の言い方を用意して合計）。写真側のモデル（約88MB）だけを端末で動かし、説明文側の数値は同梱 | Claudeが写真を見て判定（迷った候補も返す） |
 | 色・柄の判定 | 写真から地の色と2色目を計算し、柄はCLIPで判定 | Claudeが地の色・2色目・柄を判定 |
 | コーデ・買い足し | 独自の点数付け | Claudeが考える（写真は送らず、登録情報だけ送る） |
-| 写真の送信 | しない | 判定時だけ、中継サーバー経由でAnthropicへ |
+| 写真の送信 | しない | 判定時だけ、長辺768pxに縮めて中継サーバー経由でAnthropicへ |
 
 - 初期値は `.env` の `VITE_AI_PROVIDER`（`local` / `claude`）。アプリの設定画面でも切り替えられる
 - Claudeモードで失敗したときは端末内AIで続ける（設定で切れる）
@@ -52,6 +52,11 @@ npm run typecheck
 npm run build
 ```
 
+### 端末内AIの言い方を変えたとき
+種類・柄の判定は、英語の説明文（`src/ai/local/classifier.ts` の `LABELS` など）を数値にしたもの（`src/ai/local/textEmbeddings.json`）と写真を比べて決める。
+説明文やひな型を変えたら `npm run ai:embeddings` で数値を作り直す（Hugging Face から文章側のモデルを取るので通信が必要。約254MB、初回だけ）。
+作り直し忘れは `npm test` で分かる。GitHub Actions の「AI check」は、実際のモデルで数値の一致と、公開データセットの服の写真での正解率（種類 約96%）を確かめる。
+
 ## 構成
 ```
 src/
@@ -60,12 +65,22 @@ src/
     local/     端末内AI（種類判定・色の抽出・コーデと買い足しの点数付け）
     claude/    Claude API版（中継サーバーを呼ぶ）
     schemas.ts アプリと中継サーバーのやりとりの形（zod）
+  body/        体の写真の読み取りと 3D 表示（人体モデル human.ts、服 garments.ts、描画 render3d.ts）
+    assets/    3D の人体データ human.glb（MakeHuman から tools/body で作る）、靴の型 shoe.glb、服の切り抜きAI u2netp.onnx
   shop/        ユニクロ・GUの検索リンク、手選びの商品リスト
   storage/     端末内の保存
   screens/     画面
 server/        Claude API の中継サーバー
+tools/body/    3D の人体データを作る道具と、体型・服を並べて見るプレビュー
 docs/          設計メモ
 ```
+
+## 3D 表示の人体データ
+3D のマネキンは [MakeHuman](https://github.com/makehumancommunity/makehuman) の素体メッシュ・体型ターゲット・骨格から作っている（MakeHuman のデータは CC0 1.0）。作り方は `tools/body/build.mjs` の先頭と [docs/body-scan.md](docs/body-scan.md) の「3Dの人体モデル」にある。
+
+ほかに次の素材をアプリに入れている（アプリの設定画面の「素材のライセンス」にも表示する）。
+- 靴の3Dの型：Khronos glTF-Sample-Assets の [Materials Variants Shoe](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe)（© 2021 Shopify、[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)）。元データのライセンスはロゴ・商標を含まないので、ロゴと靴底の刻印を消し、形と色を変えて使っている（`tools/body/build-shoe.mjs`）
+- 服の切り抜きAI：[U²-Net](https://github.com/xuebinqin/U-2-Net) の小型版 U2-Netp（Apache-2.0）
 
 ## スマホで使う（GitHub Pages）
 main に push すると `.github/workflows/pages.yml` が自動でビルドして GitHub Pages に公開する。URL は `https://<GitHubのユーザー名>.github.io/freedom-closet/`。
@@ -75,5 +90,5 @@ main に push すると `.github/workflows/pages.yml` が自動でビルドし�
 - Claude API を使う中継サーバーは Pages には含まれない（端末内AIはそのまま使える）
 
 ## 未確認のこと
-- 端末内AIのモデル（`Xenova/clip-vit-base-patch32`）の判定精度と、iPhone Safariでの読込時間・メモリ。開発環境からモデルを取得できなかったため、実機で確認が必要
+- 端末内AIの iPhone Safari での読込時間・メモリ（判定精度は公開データセットの服の写真713枚で種類の正解率 約96%。実機の写真での確認はまだ）
 - GU の検索URL（`https://www.gu-global.com/jp/ja/search?q=`）が実際に開けるか
