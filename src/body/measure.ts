@@ -48,6 +48,18 @@ const P = {
 const TORSO_LEVELS = 10;
 const LEG_LEVELS = 8;
 
+/**
+ * 横の写真がないときの、胴の厚み ÷ 幅（上の段から10段）。BodyM（1803人）で横の写真から測った比の中央値。
+ * 胸のあたりがいちばん厚く、下（股の近く）にいくほど薄い
+ */
+export const TORSO_DEPTH_RATIO = [0.699, 0.784, 0.804, 0.816, 0.804, 0.748, 0.745, 0.745, 0.724, 0.693];
+
+/**
+ * 股下（股から床まで、身長を1とした割合）の見積もり。写真の股の高さは撮り方（カメラの高さや向き）で
+ * -2〜+4cm ずれ、身長の約45.7%とするほうがよく当たったので、写真の値は1割弱だけ効かせる（BodyM の train で合わせた式）
+ */
+export const inseamRatio = (photo: number) => 0.4224 + 0.076 * photo;
+
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
 
@@ -336,8 +348,9 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
 
   // 腕
   const armLen = (dist(ls, im.p(P.lElbow)) + dist(im.p(P.lElbow), im.p(P.lWrist)) + dist(rs, im.p(P.rElbow)) + dist(im.p(P.rElbow), im.p(P.rWrist))) / 2;
-  // 腕の太さは、腕の向きに直角に測る（Tの字でも下ろしていても測れる）
-  const armWidth = (from: number, to: number, at: number, fallback: number) => {
+  // 腕の太さは、腕の向きに直角に測る（Tの字でも下ろしていても測れる）。
+  // 上腕は肩からひじの7割のところで測る（4割だと腕を下ろした人の8割以上で胴まで測ってしまった。BodyM）
+  const armWidth = (from: number, to: number, at: number, fallback: number): number | undefined => {
     const ws = [
       [P.lShoulder, P.lElbow, P.lWrist],
       [P.rShoulder, P.rElbow, P.rWrist],
@@ -349,8 +362,10 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
       return nw(width) < fallback * 1.8 ? nw(width) : 0;
     });
     const ok = ws.filter((w) => w > fallback * 0.3);
-    return ok.length ? Math.min(...ok) : fallback;
+    return ok.length ? Math.min(...ok) : undefined;
   };
+  const upperArm = armWidth(0, 1, 0.7, 0.05);
+  const wristW = armWidth(1, 2, 0.85, 0.032);
 
   return {
     head: { width: nw(headW), height: nw(headH), depth: nw(headW) * 1.15 },
@@ -361,7 +376,7 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
     ankleY: ny(ankleY),
     legGap: nw(Math.abs(lc(crotch) - rc(crotch))),
     legs,
-    arm: { length: nw(armLen), upper: armWidth(0, 1, 0.4, 0.05), wrist: armWidth(1, 2, 0.85, 0.032) },
+    arm: { length: nw(armLen), upper: upperArm ?? 0.05, wrist: wristW ?? 0.032 },
     armsTouching,
     marks: {
       chest: { y: ny(at(chestA)), width: nw(chestW) },
@@ -370,6 +385,8 @@ export function measureFront(mask: Mask, lm: Landmark[]): FrontMeasure {
       thigh: nw(legBand(lerp(hip.y, kneeY, LEG_MARK_LEVELS.thigh))),
       calf: nw(legBand(lerp(kneeY, ankleY, LEG_MARK_LEVELS.calf))),
       shoulder: nw(shoulderW),
+      upperArm,
+      wrist: wristW,
     },
     ref: { shoulderY: ny(sh.y), hipY: ny(hip.y), kneeY: ny(kneeY), ankleY: ny(ankleY), chestA },
   };
@@ -441,12 +458,16 @@ export function measureSide(mask: Mask, lm: Landmark[], front: FrontMeasure): Si
 
 /** 正面（と横）の測定から体型を作る。横がなければ厚みは幅から見積もる */
 export function buildScan(front: FrontMeasure, side?: SideMeasure, at = Date.now()): BodyScan {
-  const n = front.torso.length;
+  // 股の高さは写真の値より平均に寄せる（inseamRatio）。胴の段と目安の高さは、肩から股までをその分だけ伸び縮みさせる
+  // （横の写真は写真どおりの股の高さで測ってあるので、ここで直す）
+  const crotchY = 1 - inseamRatio(1 - front.crotchY);
+  const top = front.shoulder.y;
+  const moveY = (y: number) => top + ((y - top) * (crotchY - top)) / (front.crotchY - top || 1);
   const torso = front.torso.map((sl, i) => {
-    const guess = sl.width * lerp(0.68, 0.8, i / (n - 1));
+    const guess = sl.width * TORSO_DEPTH_RATIO[i];
     const d = side?.torso[i];
     // 横の写真で腕が重なると厚く出るので、ありえない値は見積もりに戻す
-    return { ...sl, depth: d && d > sl.width * 0.45 && d < sl.width * 1.3 ? d : guess };
+    return { ...sl, y: moveY(sl.y), depth: d && d > sl.width * 0.45 && d < sl.width * 1.3 ? d : guess };
   });
   const legs = front.legs.map((l, i) => {
     const d = side?.legs[i];
@@ -466,16 +487,16 @@ export function buildScan(front: FrontMeasure, side?: SideMeasure, at = Date.now
     neck: front.neck,
     shoulder: front.shoulder,
     torso,
-    crotchY: front.crotchY,
+    crotchY,
     ankleY: front.ankleY,
     legGap: front.legGap,
     legs,
     arm: front.arm,
     marks: {
       ...m,
-      chest: { ...m.chest, depth: depth(m.chest.width, side?.marks?.chest) },
-      waist: { ...m.waist, depth: depth(m.waist.width, side?.marks?.waist) },
-      hip: { ...m.hip, depth: depth(m.hip.width, side?.marks?.hip) },
+      chest: { ...m.chest, y: moveY(m.chest.y), depth: depth(m.chest.width, side?.marks?.chest) },
+      waist: { ...m.waist, y: moveY(m.waist.y), depth: depth(m.waist.width, side?.marks?.waist) },
+      hip: { ...m.hip, y: moveY(m.hip.y), depth: depth(m.hip.width, side?.marks?.hip) },
     },
   });
 }
@@ -508,6 +529,8 @@ export function sane(s: BodyScan): BodyScan {
       thigh: lw(s.marks.thigh),
       calf: lw(s.marks.calf),
       shoulder: clamp(s.marks.shoulder, 0.17, 0.34),
+      upperArm: s.marks.upperArm === undefined ? undefined : clamp(s.marks.upperArm, 0.03, 0.09),
+      wrist: s.marks.wrist === undefined ? undefined : clamp(s.marks.wrist, 0.02, 0.05),
     },
   };
 }
@@ -532,7 +555,7 @@ export function defaultScan(profile: Profile): BodyScan {
     // おなかまわり（真ん中あたり）は体重の影響を大きく、胸と腰はほどほど。段差が出ないようになめらかに
     const bump = Math.sin(Math.PI * Math.min(1, i / (base.length - 1.5))) ** 1.5;
     const k = lerp(i >= base.length / 2 ? hipW : w, belly, bump);
-    return { y, width: width * k, depth: width * k * thick * lerp(0.68, 0.8, i / (base.length - 1)) };
+    return { y, width: width * k, depth: width * k * thick * TORSO_DEPTH_RATIO[i] };
   });
   const legBase = [0.105, 0.095, 0.08, 0.065, 0.062, 0.064, 0.055, 0.042];
   return {

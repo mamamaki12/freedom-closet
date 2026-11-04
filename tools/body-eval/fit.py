@@ -11,8 +11,8 @@ import numpy as np
 
 KEYS = ["chest", "waist", "hip", "thigh", "calf", "shoulder"]
 GT = {"chest": "chest", "waist": "waist", "hip": "hip", "thigh": "thigh", "calf": "calf", "shoulder": "shoulder-breadth"}
-# 写真の値がない（腕の太さは写真から測ってもほとんど当たらない）ので、身長・体重だけの式
-PRIOR_ONLY = {"upperArm": "bicep", "wrist": "wrist"}
+# 腕の太さ（3Dの体型に使う）。写真で測れた人は「写真＋身長（・体重）」の式、測れなかった人用に身長・体重だけの式
+ARMS = {"upperArm": "bicep", "wrist": "wrist"}
 
 
 def ellipse(w, d):
@@ -77,9 +77,12 @@ def main(train_path, test_path):
             m = np.array([(not side) or key not in ("chest", "waist") or bool(r["scan"]["marks"][key].get("depth")) for r in rows])
             x = np.array([photo(r["scan"]["marks"], key, rho, side) for r in rows]) * h
             out["models"][f"{key}.{tag}"] = {"hw": lsq(np.c_[h, w, bmi, fem, x][m], y[m]), "h": lsq(np.c_[h, fem, x][m], y[m])}
-    for key, gt in PRIOR_ONLY.items():
+    for key, gt in ARMS.items():
         y = np.array([r["gt"][gt] for r in rows])
         out["models"][key] = {"hw": lsq(np.c_[h, w, bmi, fem], y)}
+        m = np.array([bool(r["scan"]["marks"].get(key)) for r in rows])
+        x = np.array([math.pi * (r["scan"]["marks"].get(key) or 0) for r in rows]) * h
+        out["models"][f"{key}.photo"] = {"hw": lsq(np.c_[h, w, bmi, fem, x][m], y[m]), "h": lsq(np.c_[h, fem, x][m], y[m])}
 
     # 画面に出す「平均のずれ」は、合わせるのに使っていない testB で測る
     test = load(test_path)

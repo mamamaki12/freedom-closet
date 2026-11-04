@@ -67,6 +67,15 @@ describe("measureFront", () => {
     const p = person({ armsTouching: true });
     expect(measureFront(p.mask, p.lm).armsTouching).toBe(true);
   });
+  it("上腕の太さは肩からひじの7割のところで測る。胴とつながって測れなければ、測れなかったことにする", () => {
+    const m = measureFront(person().mask, person().lm);
+    expect(m.marks.upperArm).toBeCloseTo(30 / 900, 3);
+    expect(m.marks.wrist).toBeCloseTo(30 / 900, 3);
+    const t = person({ armsTouching: true });
+    const touching = measureFront(t.mask, t.lm);
+    expect(touching.marks.upperArm).toBeUndefined();
+    expect(touching.arm.upper).toBe(0.05);
+  });
   it("足が写っていなければ撮り直しをお願いする", () => {
     const { mask, lm } = person();
     lm[27] = { ...lm[27], visibility: 0.1 };
@@ -127,11 +136,27 @@ describe("measureSide", () => {
 });
 
 describe("buildScan", () => {
-  it("横の写真がなければ、厚みは幅から見積もる", () => {
+  it("横の写真がなければ、厚みは幅から見積もる（胸のあたりがいちばん厚く、股の近くは薄い。BodyM の実測の比）", () => {
     const { mask, lm } = person();
     const scan = buildScan(measureFront(mask, lm), undefined, 1);
     expect(scan.views).toEqual(["front"]);
     for (const t of scan.torso) expect(t.depth).toBeLessThan(t.width);
+    const ratio = scan.torso.map((t) => t.depth / t.width);
+    expect(ratio[3]).toBeGreaterThan(ratio[9] * 1.1);
+    expect(ratio[3]).toBeGreaterThan(ratio[0]);
+  });
+  it("股の高さは、写真の値より平均（身長の約45.7%）に寄せ、胴の段もそれに合わせて動かす", () => {
+    const front = measureFront(person().mask, person().lm);
+    // この体は股下が身長の約50%（脚が長め）
+    expect(1 - front.crotchY).toBeCloseTo(0.5, 1);
+    const scan = buildScan(front, undefined, 1);
+    expect(1 - scan.crotchY).toBeGreaterThan(0.455);
+    expect(1 - scan.crotchY).toBeLessThan(0.465);
+    // 胴のいちばん下の段は、新しい股のすぐ上。肩の高さは変えない
+    expect(scan.torso[9].y).toBeLessThan(scan.crotchY);
+    expect(scan.torso[9].y).toBeGreaterThan(scan.crotchY - 0.03);
+    expect(scan.shoulder.y).toBe(front.shoulder.y);
+    expect(scan.marks!.waist.y).toBeGreaterThan(front.marks.waist.y);
   });
   it("横の写真で測った厚みを使う（ありえない値は使わない）", () => {
     const front = measureFront(person().mask, person().lm);
@@ -230,9 +255,23 @@ describe("採寸の目安（estimateSizes）と3Dの体型の合わせ方（cali
     const wide = estimateSizes(buildScan(measureFront(p.mask, p.lm), undefined, 1), profile)!.find((s) => s.key === "waist")!.cm;
     expect(wide).toBeGreaterThan(thin + 3);
   });
-  it("体重が分からなければ、3Dの体型はそのまま", () => {
+  it("体重が分からなければ、胴・脚・肩はそのままで、腕の太さだけ写真と身長の式で直す。身長もなければ何もしない", () => {
     const s = scan();
-    expect(calibrateScan(s, { heightCm: 170, fit: "mens" })).toBe(s);
+    const c = calibrateScan(s, { heightCm: 170, fit: "mens" });
+    expect(c.torso).toEqual(s.torso);
+    expect(c.legs).toEqual(s.legs);
+    expect(c.shoulder).toEqual(s.shoulder);
+    expect(c.arm.upper).not.toBe(s.arm.upper);
+    expect(c.arm.upper * 170 * Math.PI).toBeGreaterThan(20);
+    expect(c.arm.upper * 170 * Math.PI).toBeLessThan(40);
+    expect(calibrateScan(s, { fit: "mens" })).toBe(s);
+  });
+  it("腕の太さは、写真で太く測れた人ほど太くする（体重がなくても、全員同じにはしない）", () => {
+    const s = scan();
+    const thick = { ...s, marks: { ...s.marks!, upperArm: s.marks!.upperArm! * 1.3 } };
+    for (const p of [profile, { heightCm: 170, fit: "mens" as const }]) {
+      expect(calibrateScan(thick, p).arm.upper).toBeGreaterThan(calibrateScan(s, p).arm.upper * 1.05);
+    }
   });
   it("3Dの体型は、組み合わせた目安に向けて太さを少し直す（形の高さ・長さは変えない）", () => {
     const s = scan();
@@ -245,7 +284,7 @@ describe("採寸の目安（estimateSizes）と3Dの体型の合わせ方（cali
       expect(k).toBeLessThanOrEqual(1.15);
       expect(t.depth / s.torso[i].depth).toBeCloseTo(k, 5);
     });
-    // 腕の太さは身長・体重から（写真の腕の太さはほとんど当たらなかった）
+    // 腕の太さは写真と身長・体重の式から
     expect(c.arm.upper).not.toBe(s.arm.upper);
     expect(c.arm.upper * 170 * Math.PI).toBeGreaterThan(22);
     expect(c.arm.upper * 170 * Math.PI).toBeLessThan(35);

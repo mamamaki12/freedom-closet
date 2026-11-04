@@ -110,11 +110,21 @@ export function estimateSizes(scan: BodyScan, profile: Profile): SizeEstimate[] 
   return out;
 }
 
-/** 身長・体重だけから出す、腕の太さ（cm の周）。写真の腕の太さはほとんど当たらなかったため */
-function priorOnly(key: "upperArm" | "wrist", profile: Profile): number | undefined {
+/**
+ * 上腕・手首の太さ（cm の周）。写真で測れていれば写真と身長（と体重）の式、測れていなければ身長・体重だけの式。
+ * どちらもなければ undefined
+ */
+function armGirth(key: "upperArm" | "wrist", marks: ScanMarks | undefined, profile: Profile): number | undefined {
   const { heightCm: h, weightKg: w } = profile;
-  if (!h || !w) return undefined;
-  return dot(M.models[key].hw, [h, w, w / (h / 100) ** 2, femaleness(profile)]);
+  if (!h) return undefined;
+  const f = femaleness(profile);
+  const v = marks?.[key];
+  if (v) {
+    const x = Math.PI * v * h;
+    const m = M.models[`${key}.photo`];
+    return w ? dot(m.hw, [h, w, w / (h / 100) ** 2, f, x]) : dot(m.h!, [h, f, x]);
+  }
+  return w ? dot(M.models[key].hw, [h, w, w / (h / 100) ** 2, f]) : undefined;
 }
 
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
@@ -123,11 +133,21 @@ const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
  * 3Dの体型を、写真と身長・体重を組み合わせた目安に合わせる。
  * 写真だけで測った太さは、写り方（姿勢・服・切り抜き）で数%ずれるので、胸・ウエスト・ヒップ・太もも・ふくらはぎ・肩の
  * それぞれで「組み合わせた目安 ÷ 写真だけの目安」の倍率を掛ける（あいだの高さはなめらかにつなぐ）。
- * 体重か身長が未登録、または写真で測った値がない（古い保存データ）なら、何もしない。
+ * 腕の太さは、写真で測った値をそのまま使うとずれが大きいので、身長（と体重）と組み合わせた式の値にする。
+ * 身長が未登録、または写真で測った値がない（古い保存データ）なら何もしない。体重が未登録なら腕だけ直す。
  */
 export function calibrateScan(scan: BodyScan, profile: Profile): BodyScan {
   const marks = scan.marks;
-  if (!marks || !profile.heightCm || !profile.weightKg) return scan;
+  if (!marks || !profile.heightCm) return scan;
+  const h = profile.heightCm;
+  const upper = armGirth("upperArm", marks, profile);
+  const wrist = armGirth("wrist", marks, profile);
+  const arm = {
+    ...scan.arm,
+    upper: upper ? clamp(upper / Math.PI / h, 0.03, 0.09) : scan.arm.upper,
+    wrist: wrist ? clamp(wrist / Math.PI / h, 0.02, 0.05) : scan.arm.wrist,
+  };
+  if (!profile.weightKg) return { ...scan, arm };
   const k = (key: SizeKey) => {
     const both = estimate(marks, profile, key, true);
     const photo = estimate(marks, profile, key, false);
@@ -152,9 +172,6 @@ export function calibrateScan(scan: BodyScan, profile: Profile): BodyScan {
   const kCalf = k("calf");
   // 太ももの倍率は股から脚の半分まで、ふくらはぎの倍率はそこから下
   const legK = (t: number) => (t <= 0.35 ? kThigh : t >= 0.6 ? kCalf : lerp(kThigh, kCalf, (t - 0.35) / 0.25));
-  const h = profile.heightCm;
-  const upper = priorOnly("upperArm", profile);
-  const wrist = priorOnly("wrist", profile);
   return {
     ...scan,
     shoulder: { ...scan.shoulder, width: scan.shoulder.width * k("shoulder") },
@@ -166,10 +183,6 @@ export function calibrateScan(scan: BodyScan, profile: Profile): BodyScan {
       const f = legK(l.t);
       return { ...l, width: l.width * f, depth: l.depth * f };
     }),
-    arm: {
-      ...scan.arm,
-      upper: upper ? clamp(upper / Math.PI / h, 0.03, 0.09) : scan.arm.upper,
-      wrist: wrist ? clamp(wrist / Math.PI / h, 0.02, 0.05) : scan.arm.wrist,
-    },
+    arm,
   };
 }

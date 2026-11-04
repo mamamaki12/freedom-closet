@@ -65,4 +65,7 @@ export interface ScanMarks {
   calf: number;
   /** 肩の点の高さでの体の外側どうしの幅 */
   shoulder: number;
+  /** 上腕（肩からひじの7割）と手首の太さ。腕が胴にくっついていて測れなかったときはない */
+  upperArm?: number;
+  wrist?: number;
 }
