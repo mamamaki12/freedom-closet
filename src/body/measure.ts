@@ -18,6 +18,8 @@ export interface Mask {
   data: ArrayLike<number>;
   /** 読み取り用に写真のまわりに足した余白（上下左右それぞれ、写真の高さ・幅に対する割合） */
   padding?: number;
+  /** この値より大きいところを人とみなす（ふつうは 0.5） */
+  threshold?: number;
 }
 
 export class ScanError extends Error {}
@@ -72,7 +74,7 @@ class Img {
     x = Math.round(x);
     y = Math.round(y);
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return false;
-    return this.mask.data[y * this.w + x] > 0.5;
+    return this.mask.data[y * this.w + x] > (this.mask.threshold ?? 0.5);
   }
   /** y の行で、x を含む（なければ近くの）人の部分の左右の端 */
   run(y: number, x: number, tol = this.w * 0.02): [number, number] | undefined {
