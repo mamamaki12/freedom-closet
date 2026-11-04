@@ -74,8 +74,9 @@ export function parseHuman(buffer: ArrayBuffer): Promise<Human> {
             morphs: extras.morphs,
             landmarks: extras.landmarks,
             body: pick("body"),
-            tights: pick("tights"),
-            skirt: pick("skirt"),
+            // 服を切り出すメッシュは粗いので、細かくしてから使う（えりぐりなどの切り口がなめらかになる）
+            tights: subdivide(pick("tights")),
+            skirt: subdivide(pick("skirt")),
           });
         } catch (e) {
           reject(e);
@@ -126,6 +127,81 @@ function decode(mesh: THREE.Mesh, nMorphs: number): HumanMesh {
   const index =
     idx instanceof Uint32Array ? new Uint32Array(idx) : new Uint16Array(idx);
   return { position, parts, index, morphs };
+}
+
+/**
+ * メッシュを細かくする（三角形を4つに分ける）。辺のまん中の点は、両はしの頂点の向き（法線）から
+ * なめらかな曲面の上に置く（PN 三角形と同じ置き方）。部位の重みと体型ごとの差分は両はしの平均
+ */
+export function subdivide(mesh: HumanMesh): HumanMesh {
+  const P = mesh.position;
+  const n = P.length / 3;
+  const idx = mesh.index;
+  // 同じ位置にある頂点（属性の切れ目で分かれた頂点）は法線を共有する（切れ目にすき間ができないように）
+  const weld = new Map<string, number>();
+  const same = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    const k = `${Math.round(P[i * 3] * 1e5)},${Math.round(P[i * 3 + 1] * 1e5)},${Math.round(P[i * 3 + 2] * 1e5)}`;
+    let r = weld.get(k);
+    if (r === undefined) {
+      r = i;
+      weld.set(k, i);
+    }
+    same[i] = r;
+  }
+  const N = new Float32Array(n * 3);
+  for (let f = 0; f < idx.length; f += 3) {
+    const [a, b, c] = [idx[f], idx[f + 1], idx[f + 2]];
+    const e1 = [0, 1, 2].map((k) => P[b * 3 + k] - P[a * 3 + k]);
+    const e2 = [0, 1, 2].map((k) => P[c * 3 + k] - P[a * 3 + k]);
+    const fn = [e1[1] * e2[2] - e1[2] * e2[1], e1[2] * e2[0] - e1[0] * e2[2], e1[0] * e2[1] - e1[1] * e2[0]];
+    for (const v of [a, b, c]) for (let k = 0; k < 3; k++) N[same[v] * 3 + k] += fn[k];
+  }
+  for (let i = 0; i < n; i++) {
+    const r = same[i];
+    const l = Math.hypot(N[r * 3], N[r * 3 + 1], N[r * 3 + 2]) || 1;
+    for (let k = 0; k < 3; k++) N[i * 3 + k] = N[r * 3 + k] / l;
+  }
+  const pos: number[] = Array.from(P);
+  const parts: number[] = Array.from(mesh.parts);
+  const morphs: number[][] = mesh.morphs.map((m) => Array.from(m));
+  const mid = new Map<number, number>();
+  const midpoint = (a: number, b: number): number => {
+    const key = a < b ? a * n + b : b * n + a;
+    let v = mid.get(key);
+    if (v !== undefined) return v;
+    v = pos.length / 3;
+    mid.set(key, v);
+    let wa = 0;
+    let wb = 0;
+    for (let k = 0; k < 3; k++) {
+      const d = P[b * 3 + k] - P[a * 3 + k];
+      wa += d * N[a * 3 + k];
+      wb -= d * N[b * 3 + k];
+    }
+    for (let k = 0; k < 3; k++)
+      pos.push((P[a * 3 + k] + P[b * 3 + k]) / 2 - (wa * N[a * 3 + k] + wb * N[b * 3 + k]) / 8);
+    for (let k = 0; k < 4; k++) parts.push((mesh.parts[a * 4 + k] + mesh.parts[b * 4 + k]) / 2);
+    mesh.morphs.forEach((m, j) => {
+      for (let k = 0; k < 3; k++) morphs[j].push((m[a * 3 + k] + m[b * 3 + k]) / 2);
+    });
+    return v;
+  };
+  const out: number[] = [];
+  for (let f = 0; f < idx.length; f += 3) {
+    const [a, b, c] = [idx[f], idx[f + 1], idx[f + 2]];
+    const ab = midpoint(a, b);
+    const bc = midpoint(b, c);
+    const ca = midpoint(c, a);
+    out.push(a, ab, ca, ab, b, bc, ca, bc, c, ab, bc, ca);
+  }
+  const count = pos.length / 3;
+  return {
+    position: new Float32Array(pos),
+    parts: new Float32Array(parts),
+    index: count > 65535 ? new Uint32Array(out) : new Uint16Array(out),
+    morphs: morphs.map((m) => new Float32Array(m)),
+  };
 }
 
 // ---------- 体型の混ぜ方 ----------

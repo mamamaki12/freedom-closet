@@ -49,11 +49,12 @@ export interface Paint {
   /** 写真から取った地の色（生地の見本の平均）。靴など模様を貼らないものに使う */
   tone?: string;
   /**
-   * 生地の見本の一辺が、写真の中の基準の幅（トップスは胴の幅、ボトムスは腰の幅）の何倍か。
+   * 生地の見本（つなぎ目なくくり返せる模様1枚）の横と縦が、写真の中の基準の幅
+   * （トップスは胴の幅、ボトムスは腰の幅）の何倍か。
    * 3Dでも同じ割合で敷き詰めて、前（写真）と背中・袖（見本）の模様の大きさをそろえる
    */
-  tile?: number;
-  sleeveTile?: number;
+  tile?: [number, number];
+  sleeveTile?: [number, number];
 }
 
 const SKIN = new THREE.MeshStandardMaterial({
@@ -86,8 +87,8 @@ export function fabric(
     if (kind === "whole") {
       map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
     } else {
-      // 折り返して敷き詰める（つなぎ目の段差が出ない）
-      map.wrapS = map.wrapT = THREE.MirroredRepeatWrapping;
+      // そのまま敷き詰める（見本はつなぎ目なくくり返せる模様にしてある。折り返すと柄が左右対称に映る）
+      map.wrapS = map.wrapT = THREE.RepeatWrapping;
     }
   }
   // 布のつやは生地の色にする（白いつやだと、黒や紺の服が白っぽくかすんで見える）

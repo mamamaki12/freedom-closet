@@ -8,6 +8,8 @@ const NB = [
   [0, -1],
 ] as const;
 
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
 export interface Shot {
   width: number;
   height: number;
@@ -349,6 +351,104 @@ export function columnSpans(
     return out;
   };
   return [smooth(top), smooth(bottom)];
+}
+
+/**
+ * 肩の上の列（首のまん中 c から外へ half の 0.4〜0.66 倍）の上端を、外れ値（ハンガーの棒など）をのぞいて直線にし、
+ * 首の付け根（c から neck）での高さを出す。dir は左（-1）か右（1）
+ */
+function shoulderAt(top: Float32Array, c: number, half: number, neck: number, dir: 1 | -1): number | undefined {
+  const n = top.length;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let k = Math.ceil(half * 0.4); k <= Math.floor(half * 0.66); k++) {
+    const x = Math.round(c + dir * k);
+    if (x < 0 || x >= n || Number.isNaN(top[x])) continue;
+    xs.push(k);
+    ys.push(top[x]);
+  }
+  if (xs.length < 3) return undefined;
+  const sorted = [...ys].sort((p, q) => p - q);
+  const med = sorted[sorted.length >> 1];
+  const spread = Math.max(1, sorted[Math.floor(sorted.length * 0.75)] - sorted[Math.floor(sorted.length * 0.25)]);
+  let sx = 0;
+  let sy = 0;
+  let sxx = 0;
+  let sxy = 0;
+  let m = 0;
+  for (let i = 0; i < xs.length; i++) {
+    if (Math.abs(ys[i] - med) > spread * 2.5) continue;
+    sx += xs[i];
+    sy += ys[i];
+    sxx += xs[i] * xs[i];
+    sxy += xs[i] * ys[i];
+    m++;
+  }
+  if (m < 3) return med;
+  const den = m * sxx - sx * sx;
+  // 肩は外へ下がる（上端の行番号が増える）。上がっていたら水平とみなす
+  const slope = Math.max(0, den > 0 ? (m * sxy - sx * sy) / den : 0);
+  return (sy - slope * sx) / m + slope * neck;
+}
+
+/** 首の付け根は胴の幅のまん中から 3 割ほど外 */
+const NECK_HALF = 0.36;
+
+/**
+ * 首のまん中の列（服の範囲の中の列番号）。写真の服が少し傾いていたり、袖の広げ方が左右で違ったりすると、
+ * 胴の範囲のまん中は首からずれる。首のところでは上端が肩の線から外れる（えり・ハンガーのフックは上に、
+ * 平らに置いた T シャツのえりぐりは下に）ので、その外れ方の重心を首のまん中とする
+ */
+export function neckCenter(top: Float32Array, bodyU: [number, number]): number {
+  const n = top.length;
+  const half = ((bodyU[1] - bodyU[0]) / 2) * n;
+  let c = ((bodyU[0] + bodyU[1]) / 2) * n;
+  for (let pass = 0; pass < 2; pass++) {
+    const neck = half * NECK_HALF;
+    const yl = shoulderAt(top, c, half, neck, -1);
+    const yr = shoulderAt(top, c, half, neck, 1);
+    if (yl === undefined || yr === undefined) return c;
+    let sw = 0;
+    let swx = 0;
+    for (let x = Math.ceil(c - half * 0.45); x <= Math.floor(c + half * 0.45); x++) {
+      if (x < 0 || x >= n || Number.isNaN(top[x])) continue;
+      const base = yl + ((yr - yl) * (x - (c - neck))) / (2 * neck);
+      const d = Math.abs(top[x] - base);
+      sw += d;
+      swx += d * x;
+    }
+    // 首のところがはっきりしない（肩の線とほとんど同じ）ときは、胴のまん中のまま
+    if (sw < half * 0.9 * 0.02 * half) return c;
+    const next = swx / sw;
+    // 大きく外れたら信じない（胴の幅の 15% まで）
+    c = clamp(next, c - half * 0.15, c + half * 0.15);
+  }
+  return c;
+}
+
+/**
+ * 肩の線：列ごとの服の上端 top（columnSpans の、服の範囲の中の列）のうち、胴のまん中の首のところだけ、
+ * 左右の肩の線を首の付け根までのばしてまっすぐつないだ高さにする。
+ * 首のところに写るもの（ハンガーのフック・えり・えりぐりから見える後ろ身ごろの裏や名札）は、
+ * これより上にあるので模様に入らず、模様の縦の伸ばし方も肩とそろう。
+ * bodyU は胴の範囲（服の範囲の中の割合。まん中が首のまん中）
+ */
+export function shoulderTop(top: Float32Array, bodyU: [number, number]): Float32Array {
+  const n = top.length;
+  const out = new Float32Array(top);
+  const c = ((bodyU[0] + bodyU[1]) / 2) * n;
+  const half = ((bodyU[1] - bodyU[0]) / 2) * n;
+  const neck = half * NECK_HALF;
+  const yl = shoulderAt(top, c, half, neck, -1);
+  const yr = shoulderAt(top, c, half, neck, 1);
+  if (yl === undefined || yr === undefined) return out;
+  const xl = c - neck;
+  const xr = c + neck;
+  for (let x = Math.ceil(xl); x <= Math.floor(xr); x++) {
+    if (x < 0 || x >= n) continue;
+    out[x] = yl + ((yr - yl) * (x - xl)) / (xr - xl);
+  }
+  return out;
 }
 
 /**
@@ -919,7 +1019,14 @@ export function planSwatches(
   const box: Box = [x0, x1, y0, y1];
   const bw = x1 - x0 + 1;
   const bh = y1 - y0 + 1;
-  const bodyU: [number, number] = mask ? bodyRange(mask, w, x0, x1, y0, y1) : [0, 1];
+  let bodyU: [number, number] = mask ? bodyRange(mask, w, x0, x1, y0, y1) : [0, 1];
+  // 上に着る服は、胴の範囲を首のまん中にそろえる（前立てやプリントが3Dのまん中に来るように）
+  if (mask && kind === "upper" && bodyU[1] - bodyU[0] < 1) {
+    const [top] = columnSpans(mask, w, x0, x1, y0, y1);
+    const c = neckCenter(top, bodyU) / bw;
+    const half = (bodyU[1] - bodyU[0]) / 2;
+    bodyU = [clamp(c - half, 0, 1), clamp(c + half, 0, 1)];
+  }
   const tx0 = x0 + bodyU[0] * bw;
   const tx1 = x0 + bodyU[1] * bw;
   const refPx =

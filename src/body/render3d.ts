@@ -2,7 +2,7 @@
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { RoomEnvironment } from "three/examples/jsm/environments/RoomEnvironment.js";
 import { COLORS } from "../domain/colors";
-import { lookShape } from "../domain/look";
+import { lookShape, type Neck } from "../domain/look";
 import type { Profile } from "../domain/profile";
 import type { Garment } from "../domain/types";
 import {
@@ -15,6 +15,7 @@ import {
 } from "./model3d";
 import { garmentMatte } from "./cutout";
 import { loadShoe } from "./shoe";
+import { patternTilt, seamlessTile } from "./tile";
 import {
   columnSpans,
   erode,
@@ -23,6 +24,7 @@ import {
   matteMask,
   planSwatches,
   pushPullFill,
+  shoulderTop,
   type PhotoKind,
 } from "./photoMask";
 import type { BodyScan } from "./types";
@@ -37,6 +39,11 @@ function plausible(mask: Uint8Array, w: number, h: number): boolean {
   for (const v of mask) c += v;
   return c > w * h * 0.12 && c < w * h * 0.97;
 }
+
+const perRef = (size: [number, number], ref: number): [number, number] => [
+  size[0] / ref,
+  size[1] / ref,
+];
 
 function canvasOf(w: number, h: number) {
   const c = document.createElement("canvas");
@@ -53,7 +60,7 @@ function canvasOf(w: number, h: number) {
 export async function garmentTextures(
   photo: Blob,
   color: string,
-  opts: { kind?: PhotoKind; matte?: boolean } = {},
+  opts: { kind?: PhotoKind; matte?: boolean; neck?: Neck } = {},
 ): Promise<Omit<Paint, "color">> {
   const kind = opts.kind ?? "upper";
   const bmp = await createImageBitmap(photo);
@@ -106,7 +113,9 @@ export async function garmentTextures(
     // すその丸みやえりのくぼみで空く部分が出ないようにする。
     // ただし、服の高さの 4 分の 3 より短い列（ワンピースのすその広がり・袖）は伸ばさない（模様が縦に流れて見えるため）。
     // 空いたところは、あとでまわりの服の色で埋める
-    const [top, bottom] = columnSpans(mask!, w, x0, x1, y0, y1);
+    const [rawTop, bottom] = columnSpans(mask!, w, x0, x1, y0, y1);
+    // 上に着る服は、首のところ（えり・ハンガー・えりぐりから見える裏）を肩の線で切る
+    const top = kind === "upper" ? shoulderTop(rawTop, plan.bodyU) : rawTop;
     for (let dx = 0; dx < whole.width; dx++) {
       const X = Math.min(x1, x0 + Math.floor(((dx + 0.5) / whole.width) * bw));
       const span = bottom[X - x0] - top[X - x0] + 1;
@@ -138,30 +147,81 @@ export async function garmentTextures(
     mean: undefined,
   };
   const sleeveSq = plan.sleeve;
+  /**
+   * 生地の見本：ボーダーやチェックの傾きを直して取り、光のむらをならし、
+   * 折り返さずにそのまま並べてもつなぎ目が見えない模様にする（tile.ts）。
+   * size は、できた模様1枚が写真（縮小したもの）の何画素ぶんか [横, 縦]
+   */
   const swatchOf = (sq: { cx: number; cy: number; side: number }) => {
-    const c = canvasOf(128, 128);
+    const N = 128;
+    const c = canvasOf(N, N);
     const ctx = c.getContext("2d", { willReadFrequently: true })!;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(
-      bmp,
-      (sq.cx - sq.side / 2) / k,
-      (sq.cy - sq.side / 2) / k,
-      sq.side / k,
-      sq.side / k,
-      0,
-      0,
-      128,
-      128,
-    );
-    // 光のむらをならす（折り返して並べたときに、ひし形の模様が出ないように）
-    const d = ctx.getImageData(0, 0, 128, 128);
-    flattenLight(d.data, 128, 18);
-    ctx.putImageData(d, 0, 0);
-    return c;
+    const draw = (tilt: number, side: number) => {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, N, N);
+      ctx.translate(N / 2, N / 2);
+      ctx.rotate(-tilt);
+      ctx.scale((N * k) / side, (N * k) / side);
+      ctx.translate(-sq.cx / k, -sq.cy / k);
+      ctx.drawImage(bmp, 0, 0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+    };
+    draw(0, sq.side);
+    const tilt = patternTilt(ctx.getImageData(0, 0, N, N));
+    // 傾けて取る四角は、もとの四角の中に収まる大きさにする（まわりの背景や別の柄が入らないように）
+    const side = sq.side / (Math.abs(Math.cos(tilt)) + Math.abs(Math.sin(tilt)));
+    if (tilt !== 0) draw(tilt, side);
+    const d = ctx.getImageData(0, 0, N, N);
+    flattenLight(d.data, N, 18);
+    const t = seamlessTile(d);
+    const out = canvasOf(t.width, t.height);
+    const octx = out.getContext("2d")!;
+    const od = octx.createImageData(t.width, t.height);
+    od.data.set(t.data);
+    octx.putImageData(od, 0, 0);
+    return {
+      canvas: out,
+      size: [(side * t.width) / N, (side * t.height) / N] as [number, number],
+    };
   };
   const swatch = swatchOf(bodySq);
   const sleeve = sleeveSq ? swatchOf(sleeveSq) : undefined;
   bmp.close();
+  // 3Dでえりを作る服は、写真のえりのところ（首のまわり）を生地の模様でうめる。
+  // 写真のえりが胸に写ったまま、3Dのえりと二重に見えないように
+  const depth = opts.neck ? COLLAR_DEPTH[opts.neck] : undefined;
+  if (ok && depth) {
+    const W = whole.width;
+    const H = whole.height;
+    const cx = ((plan.bodyU[0] + plan.bodyU[1]) / 2) * W;
+    const reach = ((plan.bodyU[1] - plan.bodyU[0]) / 2) * W * 0.36 * depth.width;
+    const pat = canvasOf(W, H);
+    const pctx = pat.getContext("2d", { willReadFrequently: true })!;
+    const pattern = pctx.createPattern(swatch.canvas, "repeat");
+    if (pattern) {
+      // 模様1枚の大きさを、写真を枠いっぱいにのばした倍率に合わせる
+      const sx = (swatch.size[0] * W) / bw / swatch.canvas.width;
+      const sy = (swatch.size[1] * H) / bh / swatch.canvas.height;
+      pattern.setTransform(new DOMMatrix([sx, 0, 0, sy, 0, 0]));
+      pctx.fillStyle = pattern;
+      pctx.fillRect(0, 0, W, H);
+      const pd = pctx.getImageData(0, 0, W, H);
+      const wd = wctx.getImageData(0, 0, W, H);
+      const feather = H * 0.02;
+      for (let y = 0; y < H; y++)
+        for (let x = 0; x < W; x++) {
+          const u = Math.abs(x - cx) / reach;
+          if (u >= 1) continue;
+          const d = H * (depth.side + (depth.center - depth.side) * (1 - u * u) ** 1.5);
+          const a = Math.min(1, Math.max(0, (d - y) / feather)) * Math.min(1, (1 - u) * 6);
+          if (a <= 0) continue;
+          const i = (y * W + x) * 4;
+          for (let c = 0; c < 3; c++) wd.data[i + c] = wd.data[i + c] * (1 - a) + pd.data[i + c] * a;
+        }
+      wctx.putImageData(wd, 0, 0);
+    }
+  }
   // 地の色：生地の見本の平均（背景は除く）
   const hex = (c: number[]) =>
     `#${c
@@ -180,14 +240,25 @@ export async function garmentTextures(
   };
   return {
     whole: tex(whole),
-    swatch: tex(swatch),
-    sleeve: sleeve && tex(sleeve),
+    swatch: tex(swatch.canvas),
+    sleeve: sleeve && tex(sleeve.canvas),
     bodyU: ok ? plan.bodyU : undefined,
     tone,
-    tile: plan.refPx > 0 ? bodySq.side / plan.refPx : undefined,
-    sleeveTile: sleeveSq && plan.refPx > 0 ? sleeveSq.side / plan.refPx : undefined,
+    tile: plan.refPx > 0 ? perRef(swatch.size, plan.refPx) : undefined,
+    sleeveTile: sleeve && plan.refPx > 0 ? perRef(sleeve.size, plan.refPx) : undefined,
   };
 }
+
+/**
+ * 写真のえりのところ（枠の上のはしからの深さ。枠の高さに対する割合）。
+ * center は首のまん中、side は首の付け根の少し外（width は首の付け根までの何倍の幅まで）
+ */
+const COLLAR_DEPTH: Partial<Record<Neck, { center: number; side: number; width: number }>> = {
+  collar: { center: 0.17, side: 0.05, width: 1.45 },
+  hood: { center: 0.12, side: 0.05, width: 1.4 },
+  stand: { center: 0.07, side: 0.04, width: 1.3 },
+  lapel: { center: 0.3, side: 0.06, width: 1.6 },
+};
 
 const paints = new WeakMap<Blob, Promise<Omit<Paint, "color">>>();
 
@@ -198,7 +269,9 @@ function paintFor(g: Garment): Promise<Paint> {
   if (!p) {
     const kind: PhotoKind =
       g.category === "shoes" ? "shoes" : g.category === "bottoms" ? "lower" : "upper";
-    p = garmentTextures(g.photo, color, { kind }).catch(() => ({}));
+    const shape = lookShape(g);
+    const neck = "neck" in shape ? shape.neck : undefined;
+    p = garmentTextures(g.photo, color, { kind, neck }).catch(() => ({}));
     paints.set(g.photo, p);
   }
   return p.then((t) => ({ ...t, color }));

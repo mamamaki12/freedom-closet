@@ -125,10 +125,46 @@ describe("服の切り出し", () => {
         expect(faces).toBe(p.geometry.getIndex()!.count);
       }
     }
-    // 上下に分かれる服は 2 枚
+    // 上下に分かれる服は、写真を貼る布が 2 枚（えりぐりのふちは別に付く）
     expect(
-      garmentPieces(h, fit, { kind: "dress", sleeve: "none", length: "long" })
-        .length,
+      garmentPieces(h, fit, { kind: "dress", sleeve: "none", length: "long" }).filter(
+        (p) => p.geometry.groups[0].count > 0,
+      ).length,
     ).toBe(2);
+  }, 60000);
+
+  it("えりの形ごとに、首のまわりを囲むえりができる", async () => {
+    const h = await load();
+    const profile = { heightCm: 172, weightKg: 65, fit: "mens" as const };
+    const fit = fitHuman(h, defaultScan(profile), profile, { warp: false });
+    const m = fit.marks;
+    const necks = ["crew", "v", "plain", "collar", "stand", "hood"] as const;
+    const height: Record<string, number> = {};
+    for (const neck of necks) {
+      const pieces = garmentPieces(h, fit, { kind: "top", sleeve: "short", hem: "normal", neck });
+      expect(pieces.length, neck).toBe(2);
+      const body = pieces[0].geometry.getAttribute("position").array as Float32Array;
+      const pos = pieces[1].geometry.getAttribute("position").array as Float32Array;
+      expect(finite(pos), neck).toBe(true);
+      // 首のまわりを1周する（向きの 12 区切りのどれにも点がある）
+      const seen = new Set<number>();
+      let top = -Infinity;
+      for (let i = 0; i < pos.length; i += 3) {
+        const a = Math.atan2(pos[i], pos[i + 2] - m.neckCz);
+        seen.add(Math.floor(((a + Math.PI) / (2 * Math.PI)) * 12) % 12);
+        top = Math.max(top, pos[i + 1]);
+        expect(pos[i + 1], neck).toBeGreaterThan(m.chestY - 0.12);
+      }
+      expect(seen.size, neck).toBe(12);
+      let clothTop = -Infinity;
+      for (let i = 1; i < body.length; i += 3) clothTop = Math.max(clothTop, body[i]);
+      height[neck] = top - clothTop;
+    }
+    // リブやふちの折り返しは低く、シャツのえり・立ちえり・フードは首に沿って立つ
+    expect(height.crew).toBeLessThan(0.006);
+    expect(height.plain).toBeLessThan(0.004);
+    expect(height.collar).toBeGreaterThan(0.01);
+    expect(height.stand).toBeGreaterThan(0.015);
+    expect(height.hood).toBeGreaterThan(0.015);
   }, 60000);
 });
