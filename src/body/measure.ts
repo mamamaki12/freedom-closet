@@ -570,5 +570,7 @@ export function fitClothes(scan: BodyScan, profile: Profile): { scan: BodyScan; 
   const ratios = [...scan.torso.map((t, i) => t.width / expect.torso[i].width), ...scan.legs.map((l, i) => l.width / expect.legs[i].width)];
   // 半分以上の段が想定よりずっと太ければ、ゆったりした服と判断する
   const loose = ratios.filter((r) => r > CLOTHES_TOLERANCE).length >= ratios.length / 2;
-  return { scan: { ...scan, torso, legs }, loose };
+  // ゆったりした服だと、写真で測った胸囲などの目安も服の分だけ大きく出るので、目安は出さない
+  // （BodyM の下着のシルエットでは、2,495人中3人しか「ゆったり」にならなかった）
+  return { scan: loose ? { ...scan, torso, legs, marks: undefined, loose } : { ...scan, torso, legs }, loose };
 }

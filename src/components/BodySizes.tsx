@@ -8,6 +8,8 @@ import type { Profile } from "../domain/profile";
 const SHOWN: SizeKey[] = ["chest", "waist", "hip", "thigh"];
 
 export function BodySizes({ scan, profile }: { scan: BodyScan; profile: Profile }) {
+  if (scan.loose)
+    return <p className="hint">ゆったりした服の写真なので、胸囲・ウエストなどの目安（cm）は出していません（服の分だけ大きく出るため）。下着か、体にぴったりした服で撮り直すと出せます。</p>;
   if (!scan.marks) return <p className="hint">撮り直すと、胸囲・ウエストなどの目安（cm）も出せます。</p>;
   const sizes = estimateSizes(scan, profile)?.filter((s) => SHOWN.includes(s.key));
   if (!sizes) return <p className="hint">身長を設定すると、胸囲・ウエストなどの目安（cm）も出せます。</p>;

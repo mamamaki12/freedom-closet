@@ -39,6 +39,8 @@ export interface BodyScan {
   arm: { length: number; upper: number; wrist: number };
   /** 採寸の目安（胸囲など）を出すために、写真で直接測った値。古い保存データにはない */
   marks?: ScanMarks;
+  /** ゆったりした服で撮った（胴や脚の太さは身長・体重からの見積もりに寄せ、cm の目安は出さない） */
+  loose?: boolean;
 }
 
 /** 胴の決まった高さで測った幅と、横の写真があれば厚み（身長を1とした割合） */

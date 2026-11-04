@@ -176,6 +176,18 @@ describe("fitClothes（服を着た写真の分をさし引く）", () => {
     expect(r.scan.crotchY).toBe(coat.crotchY);
     expect(r.scan.shoulder).toEqual(coat.shoulder);
   });
+  it("ゆったりした服なら、服の分だけ大きく出る cm の目安（marks）は消す。ぴったりなら残す", () => {
+    const base = defaultScan(profile);
+    const marks = { chest: { y: 0.27, width: 0.2, depth: 0.14 }, waist: { y: 0.36, width: 0.17 }, hip: { y: 0.47, width: 0.2 }, thigh: 0.1, calf: 0.065, shoulder: 0.24 };
+    const coat = { ...base, marks, torso: base.torso.map((t) => ({ ...t, width: t.width * 1.6 })), legs: base.legs.map((l) => ({ ...l, width: l.width * 1.5 })) };
+    const r = fitClothes(coat, profile);
+    expect(r.scan.loose).toBe(true);
+    expect(r.scan.marks).toBeUndefined();
+    expect(estimateSizes(r.scan, profile)).toBeUndefined();
+    const tight = fitClothes({ ...base, marks }, profile);
+    expect(tight.scan.loose).toBeUndefined();
+    expect(tight.scan.marks).toEqual(marks);
+  });
   it("やせている人の細さはそのまま", () => {
     const base = defaultScan(profile);
     const thin = { ...base, torso: base.torso.map((t) => ({ ...t, width: t.width * 0.8 })) };
