@@ -5,6 +5,7 @@ import {
   cleanMask,
   dilate,
   erode,
+  hangingTags,
   palette,
   pickSquare,
   planSwatches,
@@ -141,5 +142,44 @@ describe("模様づくりの計画", () => {
     const plan = planSwatches(img, undefined, "lower");
     expect(plan.body).toBeDefined();
     expect(plan.bodyU).toEqual([0, 1]);
+  });
+});
+
+describe("えりから垂れ下がる値札", () => {
+  // 紺に細い白い線のチェック（線は 1 画素、12 画素おき）
+  const NAVY: RGB = [28, 38, 80];
+  const LINE: RGB = [225, 225, 220];
+  const check = (x: number, y: number): RGB => (x % 12 === 0 || y % 12 === 0 ? LINE : NAVY);
+  const W = 120;
+  const H = 160;
+  const cloth = shot(W, H, check);
+  /** えりのところ（上から 20 画素まで） */
+  const seed = Float32Array.from({ length: W * H }, (_, i) => (Math.floor(i / W) < 20 ? 1 : 0));
+  /** 調べる範囲（上半分） */
+  const region = maskOf(W, H, (_, y) => y < 80);
+  const has = (m: Uint8Array, x: number, y: number) => m[y * W + x] === 1;
+
+  it("えりにつながる白い値札は見つけ、胸の白いワッペンと、下まで続く白い前立ては残す", () => {
+    const photo = shot(W, H, (x, y) => {
+      // 値札：えりから胸へ垂れ下がる（y 12〜45）
+      if (x >= 50 && x <= 62 && y >= 12 && y <= 45) return [240, 238, 232];
+      // 胸のワッペン（えりにつながっていない）
+      if (x >= 85 && x <= 100 && y >= 40 && y <= 55) return [240, 238, 232];
+      // 前立て：えりから下まで続く
+      if (x >= 20 && x <= 26 && y >= 10) return [240, 238, 232];
+      return check(x, y);
+    });
+    const tags = hangingTags(photo, cloth, seed, region);
+    expect(has(tags, 56, 30)).toBe(true);
+    expect(has(tags, 56, 44)).toBe(true);
+    expect(has(tags, 92, 47)).toBe(false);
+    expect(has(tags, 23, 50)).toBe(false);
+    // チェックの白い線は生地のうち
+    expect(has(tags, 36, 60)).toBe(false);
+  });
+
+  it("値札のない服では、何も見つけない", () => {
+    const tags = hangingTags(shot(W, H, check), cloth, seed, region);
+    expect(count(tags)).toBe(0);
   });
 });

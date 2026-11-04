@@ -1064,3 +1064,91 @@ export function planSwatches(
     : undefined;
   return { box, bodyU, refPx, body, sleeve };
 }
+
+/**
+ * えりから胸へ垂れ下がる値札・名札など（ハンガーに掛けた売り場の写真に多い）を見つける。
+ * photo は1枚貼る用の模様、cloth は同じ大きさに生地の見本を敷き詰めたもの、seed は生地でうめるところ
+ * （えりのところ。0〜1）、region は調べる範囲（首のまわり）。
+ * 生地の見本にない色が多いところと、生地の見本より大きな同じ色のかたまり（白い線のチェックの上の、白い値札）を
+ * 「生地でないところ」とし、そのかたまりのうち seed とつながり、region の下のはしまで続かない（前立てや
+ * 前の開きではない）ものを返す。胸のプリントやロゴは seed とつながらないので残る
+ */
+export function hangingTags(photo: Shot, cloth: Shot, seed: Float32Array, region: Uint8Array): Uint8Array {
+  const { width: w, height: h } = photo;
+  const n = w * h;
+  const out = new Uint8Array(n);
+  let [x0, x1, y0, y1] = [w, -1, h, -1];
+  let area = 0;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      if (region[y * w + x]) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        area++;
+      }
+  if (x1 < 0) return out;
+  const pal = palette(new Uint8Array(n).fill(1), cloth, [x0, x1, y0, y1]);
+  if (!pal) return out;
+  const K = pal.centers.length;
+  /** 生地の見本のどの色からもこれより遠い色は、生地にない色 */
+  const FAR = 48;
+  const R = 4;
+  /** 色ごとの（最後は生地にない色の）、まわり半径 R の窓の中での割合 */
+  const density = (img: Shot, inside: (i: number) => boolean) => {
+    const ind = Array.from({ length: K + 1 }, () => new Float32Array(n));
+    for (let i = 0; i < n; i++) {
+      if (!inside(i)) continue;
+      const [c, d] = nearestColor(pal, img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
+      ind[d > FAR ? K : c][i] = 1;
+    }
+    return ind.map((m) => boxBlur(m, w, h, R));
+  };
+  const clothD = density(cloth, () => true);
+  const most = clothD.map((d) => {
+    let m = 0;
+    for (let i = 0; i < n; i++) if (region[i]) m = Math.max(m, d[i]);
+    return m;
+  });
+  const photoD = density(photo, (i) => region[i] === 1);
+  const odd = new Uint8Array(n);
+  for (let i = 0; i < n; i++) {
+    if (!region[i]) continue;
+    let o = photoD[K][i] > Math.max(0.45, most[K] + 0.2);
+    for (let c = 0; c < K && !o; c++) o = photoD[c][i] > most[c] + 0.2;
+    if (o) odd[i] = 1;
+  }
+  // つながったかたまりごとに調べる
+  const seen = new Uint8Array(n);
+  const stack: number[] = [];
+  for (let s = 0; s < n; s++) {
+    if (!odd[s] || seen[s]) continue;
+    const comp: number[] = [];
+    let touches = false;
+    let bottom = 0;
+    seen[s] = 1;
+    stack.push(s);
+    while (stack.length) {
+      const i = stack.pop()!;
+      comp.push(i);
+      if (seed[i] > 0.5) touches = true;
+      const x = i % w;
+      const y = (i - x) / w;
+      bottom = Math.max(bottom, y);
+      for (const [dx, dy] of NB) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const j = ny * w + nx;
+        if (odd[j] && !seen[j]) {
+          seen[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+    if (touches && bottom < y1 - 2 && comp.length < area * 0.3) for (const i of comp) out[i] = 1;
+  }
+  // 値札のふち（写真を縮めたときのにじみ・糸）まで
+  return dilate(out, w, h, 3);
+}

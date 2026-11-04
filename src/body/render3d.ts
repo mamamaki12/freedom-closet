@@ -19,10 +19,12 @@ import type { SwatchMatch } from "./garments";
 import { loadShoe } from "./shoe";
 import { patternTilt, plainCloth, seamlessTile, softenWrinkles } from "./tile";
 import {
+  boxBlur,
   columnSpans,
   erode,
   flattenLight,
   garmentMask,
+  hangingTags,
   matteMask,
   planSwatches,
   pushPullFill,
@@ -221,16 +223,26 @@ export async function garmentTextures(
       const pd = pctx.getImageData(0, 0, W, H);
       const wd = wctx.getImageData(0, 0, W, H);
       const feather = H * 0.02;
+      /** えりのところ（生地でうめる割合） */
+      const seed = new Float32Array(W * H);
       for (let y = 0; y < H; y++)
         for (let x = 0; x < W; x++) {
           const u = Math.abs(x - cx) / reach;
           if (u >= 1) continue;
           const d = H * (depth.side + (depth.center - depth.side) * (1 - u * u) ** 1.5);
-          const a = Math.min(1, Math.max(0, (d - y) / feather)) * Math.min(1, (1 - u) * 6);
-          if (a <= 0) continue;
-          const i = (y * W + x) * 4;
-          for (let c = 0; c < 3; c++) wd.data[i + c] = wd.data[i + c] * (1 - a) + pd.data[i + c] * a;
+          seed[y * W + x] = Math.min(1, Math.max(0, (d - y) / feather)) * Math.min(1, (1 - u) * 6);
         }
+      // えりから胸へ垂れ下がる値札・名札も、生地でうめる（首のまわり：胴の幅の 6 割・上半分を調べる）
+      const half = ((plan.bodyU[1] - plan.bodyU[0]) / 2) * W;
+      const region = new Uint8Array(W * H);
+      for (let y = 0; y < H * 0.5; y++)
+        for (let x = 0; x < W; x++) if (Math.abs(x - cx) < half * 0.6) region[y * W + x] = 1;
+      const tags = boxBlur(Float32Array.from(hangingTags(wd, pd, seed, region)), W, H, 2);
+      for (let i = 0; i < W * H; i++) {
+        const a = Math.max(seed[i], tags[i]);
+        if (a <= 0) continue;
+        for (let c = 0; c < 3; c++) wd.data[i * 4 + c] = wd.data[i * 4 + c] * (1 - a) + pd.data[i * 4 + c] * a;
+      }
       wctx.putImageData(wd, 0, 0);
     }
   }
