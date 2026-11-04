@@ -1075,8 +1075,7 @@ export function planSwatches(
  */
 export function hangingTags(photo: Shot, cloth: Shot, seed: Float32Array, region: Uint8Array): Uint8Array {
   const { width: w, height: h } = photo;
-  const n = w * h;
-  const out = new Uint8Array(n);
+  const out = new Uint8Array(w * h);
   let [x0, x1, y0, y1] = [w, -1, h, -1];
   let area = 0;
   for (let y = 0; y < h; y++)
@@ -1089,40 +1088,83 @@ export function hangingTags(photo: Shot, cloth: Shot, seed: Float32Array, region
         area++;
       }
   if (x1 < 0) return out;
-  const pal = palette(new Uint8Array(n).fill(1), cloth, [x0, x1, y0, y1]);
+  // 生地の色は、敷き詰めた見本の一部（見本1枚より大きい四角）から、1 画素おきに取って調べれば足りる
+  const pw = Math.floor((Math.min(x1, x0 + 191) - x0) / 2) + 1;
+  const ph = Math.floor((Math.min(y1, y0 + 191) - y0) / 2) + 1;
+  const part = new Uint8ClampedArray(pw * ph * 4);
+  for (let y = 0; y < ph; y++)
+    for (let x = 0; x < pw; x++)
+      for (let c = 0; c < 4; c++) part[(y * pw + x) * 4 + c] = cloth.data[((y0 + y * 2) * w + x0 + x * 2) * 4 + c];
+  const pal = palette(new Uint8Array(pw * ph).fill(1), { width: pw, height: ph, data: part }, [0, pw - 1, 0, ph - 1]);
   if (!pal) return out;
   const K = pal.centers.length;
   /** 生地の見本のどの色からもこれより遠い色は、生地にない色 */
   const FAR = 48;
-  const R = 4;
-  /** 色ごとの（最後は生地にない色の）、まわり半径 R の窓の中での割合 */
-  const density = (img: Shot, inside: (i: number) => boolean) => {
-    const ind = Array.from({ length: K + 1 }, () => new Float32Array(n));
-    for (let i = 0; i < n; i++) {
-      if (!inside(i)) continue;
-      const [c, d] = nearestColor(pal, img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
-      ind[d > FAR ? K : c][i] = 1;
+  // region のまわりだけを、2×2 画素のます目ごとに調べる（値札は大きいので、それで足りる）。
+  // 色はすべての画素で数える（1 画素おきに見ると、細かいチェックがずれて見えて誤るため）
+  const ox = x0;
+  const oy = y0;
+  const cw = Math.floor((x1 - x0) / 2) + 1;
+  const ch = Math.floor((y1 - y0) / 2) + 1;
+  /** ます目 (x, y) の左上の画素 */
+  const at = (x: number, y: number) => (oy + y * 2) * w + ox + x * 2;
+  /** 色の割合を数える窓の半径（ます目で。元の画素ではおよそ 10 画素四方） */
+  const R = 2;
+  const win = (2 * R + 1) ** 2 * 4;
+  const W1 = cw + 1;
+  const plane = W1 * (ch + 1);
+  /** 色ごとの（K 番は生地にない色の）、ます目の窓の中の画素の数を求めるための累積和の表。inside の外の画素は数えない */
+  const sums = (img: Shot, inside: (i: number) => boolean) => {
+    const S = new Int32Array((K + 1) * plane);
+    const cnt = new Int32Array((K + 1) * cw);
+    const row = new Int32Array(K + 1);
+    for (let y = 0; y < ch; y++) {
+      cnt.fill(0);
+      for (let fy = oy + y * 2; fy <= Math.min(y1, oy + y * 2 + 1); fy++)
+        for (let fx = x0; fx <= x1; fx++) {
+          const i = fy * w + fx;
+          if (!inside(i)) continue;
+          const [c, d] = nearestColor(pal, img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
+          cnt[(d > FAR ? K : c) * cw + ((fx - ox) >> 1)]++;
+        }
+      row.fill(0);
+      for (let x = 0; x < cw; x++)
+        for (let c = 0; c <= K; c++) {
+          row[c] += cnt[c * cw + x];
+          S[c * plane + (y + 1) * W1 + x + 1] = S[c * plane + y * W1 + x + 1] + row[c];
+        }
     }
-    return ind.map((m) => boxBlur(m, w, h, R));
+    return S;
   };
-  const clothD = density(cloth, () => true);
-  const most = clothD.map((d) => {
-    let m = 0;
-    for (let i = 0; i < n; i++) if (region[i]) m = Math.max(m, d[i]);
-    return m;
-  });
-  const photoD = density(photo, (i) => region[i] === 1);
-  const odd = new Uint8Array(n);
-  for (let i = 0; i < n; i++) {
-    if (!region[i]) continue;
-    let o = photoD[K][i] > Math.max(0.45, most[K] + 0.2);
-    for (let c = 0; c < K && !o; c++) o = photoD[c][i] > most[c] + 0.2;
-    if (o) odd[i] = 1;
-  }
+  /** 窓の中での、色 c の割合 */
+  const share = (S: Int32Array, c: number, x: number, y: number) => {
+    const a = Math.max(0, x - R);
+    const b = Math.min(cw, x + R + 1);
+    const e = Math.max(0, y - R);
+    const f = Math.min(ch, y + R + 1);
+    const base = c * plane;
+    return (S[base + f * W1 + b] - S[base + e * W1 + b] - S[base + f * W1 + a] + S[base + e * W1 + a]) / win;
+  };
+  const clothS = sums(cloth, () => true);
+  const photoS = sums(photo, (i) => region[i] === 1);
+  // 生地の見本では、どの色もこれより大きなかたまりにはならない
+  const most = new Float32Array(K + 1);
+  for (let y = 0; y < ch; y++)
+    for (let x = 0; x < cw; x++)
+      if (region[at(x, y)]) for (let c = 0; c <= K; c++) most[c] = Math.max(most[c], share(clothS, c, x, y));
+  const odd = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++)
+    for (let x = 0; x < cw; x++) {
+      if (!region[at(x, y)]) continue;
+      let o = share(photoS, K, x, y) > Math.max(0.45, most[K] + 0.2);
+      for (let c = 0; c < K && !o; c++) o = share(photoS, c, x, y) > most[c] + 0.2;
+      if (o) odd[y * cw + x] = 1;
+    }
   // つながったかたまりごとに調べる
-  const seen = new Uint8Array(n);
+  const keep = new Uint8Array(cw * ch);
+  const seen = new Uint8Array(cw * ch);
   const stack: number[] = [];
-  for (let s = 0; s < n; s++) {
+  for (let s = 0; s < cw * ch; s++) {
     if (!odd[s] || seen[s]) continue;
     const comp: number[] = [];
     let touches = false;
@@ -1132,23 +1174,31 @@ export function hangingTags(photo: Shot, cloth: Shot, seed: Float32Array, region
     while (stack.length) {
       const i = stack.pop()!;
       comp.push(i);
-      if (seed[i] > 0.5) touches = true;
-      const x = i % w;
-      const y = (i - x) / w;
-      bottom = Math.max(bottom, y);
+      const x = i % cw;
+      const y = (i - x) / cw;
+      if (seed[at(x, y)] > 0.5) touches = true;
+      bottom = Math.max(bottom, oy + y * 2);
       for (const [dx, dy] of NB) {
         const nx = x + dx;
         const ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
-        const j = ny * w + nx;
+        if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) continue;
+        const j = ny * cw + nx;
         if (odd[j] && !seen[j]) {
           seen[j] = 1;
           stack.push(j);
         }
       }
     }
-    if (touches && bottom < y1 - 2 && comp.length < area * 0.3) for (const i of comp) out[i] = 1;
+    // 1 画素おきに数えているので、面積は 4 倍
+    if (touches && bottom < y1 - 3 && comp.length * 4 < area * 0.3) for (const i of comp) keep[i] = 1;
   }
-  // 値札のふち（写真を縮めたときのにじみ・糸）まで
-  return dilate(out, w, h, 3);
+  // 値札のふち（写真を縮めたときのにじみ・糸）まで。元の画素で 4 画素ほど広げる
+  const grown = dilate(keep, cw, ch, 2);
+  for (let y = y0; y <= Math.min(h - 1, y1 + 1); y++)
+    for (let x = x0; x <= Math.min(w - 1, x1 + 1); x++) {
+      const gx = Math.min(cw - 1, Math.round((x - ox) / 2));
+      const gy = Math.min(ch - 1, Math.round((y - oy) / 2));
+      if (grown[gy * cw + gx]) out[y * w + x] = 1;
+    }
+  return out;
 }
