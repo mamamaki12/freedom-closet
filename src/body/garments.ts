@@ -31,6 +31,12 @@ export interface SwatchMatch {
   grid?: AlignGrid;
 }
 
+/**
+ * はいている靴（ブーツの筒）の外側：体の座標の点 (x, y, z) の高さでの、脚の中心 [x, z] と、そのまわりの向きで
+ * 服が出ていなければならない半径。ブーツの筒の高さでなければ undefined。パンツのすそをブーツの上にかぶせるのに使う
+ */
+export type ShoeRoom = (x: number, y: number, z: number) => [number, number, number] | undefined;
+
 /** 見本を3Dにまっすぐ前から当てる当て方：位置 (x, y) が見本の座標 at、見本1枚が3Dで tx × ty */
 export interface SwatchPlane {
   x: number;
@@ -1161,10 +1167,33 @@ function skirtPiece(
   return geometry && { geometry, body: opts.swatchBody ? "swatch" : "whole" };
 }
 
+/**
+ * パンツのすそをブーツの筒の上にかぶせる：筒の高さで、服の点が筒の外側（room）より内にあれば、
+ * 脚の中心から外へ出す。押し出しは少しやわらかくして（布が筒の形に沿って角ばらないように）
+ */
+function overShoes(p: Float32Array, room: ShoeRoom) {
+  const SOFT = 0.002;
+  for (let i = 0; i < p.length / 3; i++) {
+    const r = room(p[i * 3], p[i * 3 + 1], p[i * 3 + 2]);
+    if (!r) continue;
+    const [cx, cz, need] = r;
+    const dx = p[i * 3] - cx;
+    const dz = p[i * 3 + 2] - cz;
+    const d = Math.hypot(dx, dz);
+    if (d < 1e-6) continue;
+    // なめらかな max(d, need)
+    const e = need - d;
+    const d2 = d + (e > 6 * SOFT ? e : SOFT * Math.log1p(Math.exp(e / SOFT)));
+    if (d2 <= d) continue;
+    p[i * 3] = cx + (dx * d2) / d;
+    p[i * 3 + 2] = cz + (dz * d2) / d;
+  }
+}
+
 /** パンツ（腰から脚）をタイツから切り出す */
 function pantsPiece(
   ctx: Ctx,
-  opts: { to: number; ease: (t: number) => number; drape: number },
+  opts: { to: number; ease: (t: number) => number; drape: number; room?: ShoeRoom },
 ): Piece | undefined {
   const { human, fit, m } = ctx;
   const mesh = human.tights;
@@ -1204,30 +1233,29 @@ function pantsPiece(
       const [tx, ty] = ctx.tile;
       return [(a * around) / tx, (m.crotchY - y) / ty, around / tx];
     },
-    drape:
-      opts.drape > 0
-        ? (p) => {
-            for (const s of [0, 1] as const) {
-              const verts: number[] = [];
-              for (let i = 0; i < mesh.parts.length / 4; i++) {
-                if (
-                  mesh.parts[i * 4 + 2] >= 0.5 &&
-                  legT(i) >= 0.08 &&
-                  (pos[i * 3] < 0 ? 0 : 1) === s
-                )
-                  verts.push(i);
-              }
-              drapeAround(
-                p,
-                verts,
-                legAxis(s),
-                lerp(m.crotchY, m.ankleY, 0.2),
-                opts.drape,
-                0.002,
-              );
-            }
+    drape: (p) => {
+      if (opts.drape > 0)
+        for (const s of [0, 1] as const) {
+          const verts: number[] = [];
+          for (let i = 0; i < mesh.parts.length / 4; i++) {
+            if (
+              mesh.parts[i * 4 + 2] >= 0.5 &&
+              legT(i) >= 0.08 &&
+              (pos[i * 3] < 0 ? 0 : 1) === s
+            )
+              verts.push(i);
           }
-        : undefined,
+          drapeAround(
+            p,
+            verts,
+            legAxis(s),
+            lerp(m.crotchY, m.ankleY, 0.2),
+            opts.drape,
+            0.002,
+          );
+        }
+      if (opts.room) overShoes(p, opts.room);
+    },
     layers: ctx.layers,
     torso: (i) => mesh.parts[i * 4 + 1] < 0.5,
   };
@@ -1271,6 +1299,8 @@ export function garmentPieces(
     tile?: [number, number];
     sleeveTile?: [number, number];
     swatchMatch?: SwatchMatch;
+    /** はいているブーツの筒の外側（パンツのすそをかぶせる） */
+    shoeRoom?: ShoeRoom;
   } = {},
   layers?: Layers,
 ): Piece[] {
@@ -1445,6 +1475,7 @@ export function garmentPieces(
         ease,
         drape:
           shape.width === "wide" ? 0.97 : shape.width === "regular" ? 0.9 : 0,
+        room: to > 0.9 ? photo.shoeRoom : undefined,
       });
       return piece ? [piece] : [];
     }

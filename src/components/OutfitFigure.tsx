@@ -120,11 +120,11 @@ function skirtPath(b: Body, length: "mini" | "knee" | "long", top = 108): string
   return path([...left, ...mirror(left)]);
 }
 
-/** 靴。足の先だけ（ブーツは脛まで） */
+/** 靴。足の先だけ（ブーツは3Dと同じショートブーツで、くるぶしの上まで） */
 function shoePaths(b: Body, style: Extract<LookShape, { kind: "shoes" }>["style"]): string[] {
   return ([-1, 1] as const).map((side) => {
     const x = CX + side * b.leg;
-    const top = style === "boots" ? 206 : style === "sandals" ? 250 : 243;
+    const top = style === "boots" ? 234 : style === "sandals" ? 250 : 243;
     const w = style === "boots" ? 7.5 : 8;
     return path([
       [x - w, top],
@@ -151,7 +151,12 @@ function layersFor(items: Garment[], b: Body): Layer[] {
   const add = (g: Garment, paths: string[], lines?: string[], texture: Layer["texture"] = "whole") =>
     layers.push({ garment: g, paths, lines, texture });
   const order = ["bottoms", "shoes", "onepiece", "tops", "outer"];
-  const sorted = [...items].sort((a, b2) => order.indexOf(a.category) - order.indexOf(b2.category));
+  // ブーツは3Dと同じく、パンツのすそをかぶせるので先に描く
+  const rank = (g: Garment) => {
+    const s = lookShape(g);
+    return s.kind === "shoes" && s.style === "boots" ? -1 : order.indexOf(g.category);
+  };
+  const sorted = [...items].sort((a, b2) => rank(a) - rank(b2));
   for (const g of sorted) {
     const s = lookShape(g);
     switch (s.kind) {

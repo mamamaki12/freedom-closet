@@ -1,9 +1,17 @@
-// 靴の3Dの型（スニーカー）。元は Khronos glTF-Sample-Assets の「Materials Variants Shoe」（© 2021 Shopify、CC BY 4.0）で、
-// tools/body/build-shoe.mjs でロゴを消し、色を塗れるように作り直したもの。
+// 靴の3Dの型。
+// - スニーカー（革靴にも使う）：Khronos glTF-Sample-Assets の「Materials Variants Shoe」（© 2021 Shopify、CC BY 4.0）を、
+//   tools/body/build-shoe.mjs でロゴを消し、色を塗れるように作り直したもの
+// - ショートブーツ：Sketchfab の「Photoscanned Female Ankle Boots」（TunnelVisionStudio、CC BY 4.0）を、
+//   tools/body/build-boot.mjs で三角形を減らし、色を塗れるように作り直したもの
 // 型は右足用で、靴の長さ＝1、かかとが z=0・つま先が z=1、床が y=0、親指側が +x。
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/examples/jsm/libs/meshopt_decoder.module.js";
+import bootBaseUrl from "./assets/boot-base.jpg?url";
+import bootMaskUrl from "./assets/boot-mask.png?url";
+import bootNormalUrl from "./assets/boot-normal.jpg?url";
+import bootOrmUrl from "./assets/boot-orm.jpg?url";
+import bootUrl from "./assets/boot.glb?url";
 import baseUrl from "./assets/shoe-base.jpg?url";
 import maskUrl from "./assets/shoe-mask.png?url";
 import normalUrl from "./assets/shoe-normal.jpg?url";
@@ -77,7 +85,7 @@ export function parseShoe(buffer: ArrayBuffer): Promise<ShoeModel> {
 
 export interface ShoeAsset {
   model: ShoeModel;
-  /** 色を塗る下地と、塗り分けの範囲（R 甲・G 底・B 濃い部分） */
+  /** 色を塗る下地と、塗り分けの範囲（R 甲・G 底・B スニーカーは濃い部分、ブーツは内側） */
   base: ImageData;
   mask: ImageData;
   /** 凹凸（革靴では甲の編み目を消して使う） */
@@ -120,19 +128,29 @@ async function dataTexture(url: string): Promise<THREE.Texture> {
   return t;
 }
 
-let loading: Promise<ShoeAsset> | undefined;
+/** 型の種類。shoe はスニーカー（革靴にも使う）、boot はショートブーツ */
+export type ShoeKind = "shoe" | "boot";
 
-/** 靴の3Dの型と模様を読み込む（1回だけ） */
-export function loadShoe(): Promise<ShoeAsset> {
-  if (!loading) {
-    loading = Promise.all([
-      fetchOk(shoeUrl)
+const FILES: Record<ShoeKind, { model: string; base: string; mask: string; normal: string; orm: string }> = {
+  shoe: { model: shoeUrl, base: baseUrl, mask: maskUrl, normal: normalUrl, orm: ormUrl },
+  boot: { model: bootUrl, base: bootBaseUrl, mask: bootMaskUrl, normal: bootNormalUrl, orm: bootOrmUrl },
+};
+
+const loading = new Map<ShoeKind, Promise<ShoeAsset>>();
+
+/** 靴の3Dの型と模様を読み込む（種類ごとに1回だけ） */
+export function loadShoe(kind: ShoeKind = "shoe"): Promise<ShoeAsset> {
+  let p = loading.get(kind);
+  if (!p) {
+    const f = FILES[kind];
+    p = Promise.all([
+      fetchOk(f.model)
         .then((r) => r.arrayBuffer())
         .then(parseShoe),
-      imageData(baseUrl),
-      imageData(maskUrl),
-      imageData(normalUrl),
-      dataTexture(ormUrl),
+      imageData(f.base),
+      imageData(f.mask),
+      imageData(f.normal),
+      dataTexture(f.orm),
     ]).then(([model, base, mask, normal, orm]) => ({
       model,
       base,
@@ -140,9 +158,10 @@ export function loadShoe(): Promise<ShoeAsset> {
       normal,
       orm,
     }));
-    loading.catch(() => (loading = undefined));
+    loading.set(kind, p);
+    p.catch(() => loading.delete(kind));
   }
-  return loading;
+  return p;
 }
 
 // ---------- 足に合わせて置く ----------
@@ -284,13 +303,27 @@ export function fitShoe(
 
 // ---------- 色を塗る ----------
 
-/** 靴の見た目。sneakers は布の甲と白いゴム底、leather は革の甲と薄くて濃い色の底 */
-export type ShoeLook = "sneakers" | "leather";
+/**
+ * 靴の見た目。sneakers は布の甲と白いゴム底、leather は革の甲と薄くて濃い色の底（どちらもスニーカーの型）、
+ * boots はブーツの型（革の甲と、濃い色の底）
+ */
+export type ShoeLook = "sneakers" | "leather" | "boots";
 
 /** 甲の下地の明るさの平均（build-shoe.mjs でこの明るさにそろえてある） */
 const UPPER_MEAN = 0.82;
 /** 革靴の底の色 */
 const LEATHER_SOLE: [number, number, number] = [44, 37, 33];
+
+/**
+ * ブーツの底の色：ふつうは濃い茶色。白・ベージュのように明るいブーツは、甲の色を少し濃くした色
+ * （明るいブーツは底も明るいことが多いため）
+ */
+function bootSole(tint: [number, number, number]): [number, number, number] {
+  const l = (0.299 * tint[0] + 0.587 * tint[1] + 0.114 * tint[2]) / 255;
+  const t = Math.min(1, Math.max(0, (l - 0.55) / 0.3));
+  const w = t * t * (3 - 2 * t);
+  return [0, 1, 2].map((c) => LEATHER_SOLE[c] * (1 - w) + tint[c] * 0.8 * w) as [number, number, number];
+}
 
 function srgb(color: string): [number, number, number] {
   const c = new THREE.Color(color);
@@ -317,7 +350,8 @@ const painted = new Map<string, THREE.Texture>();
 /**
  * 下地に靴の色を塗った模様。
  * スニーカー：甲だけに色を掛け（編み目の濃淡は残す）、底（白いゴム）と濃い部分（ひも・履き口・かかと）はそのまま。
- * 革靴：甲はなめらかな一色、ひもなどの濃い部分は甲の色を濃くした色、底は濃い茶色
+ * 革靴：甲はなめらかな一色、ひもなどの濃い部分は甲の色を濃くした色、底は濃い茶色。
+ * ブーツ：甲・底・内側（履き口の内張り）に、それぞれの色を下地の濃淡ごと掛ける（革のしわ・すれ・積み革の段は残る）
  */
 export function shoeColorMap(
   asset: ShoeAsset,
@@ -332,6 +366,7 @@ export function shoeColorMap(
   const out = new ImageData(w, h);
   const O = out.data;
   const tint = srgb(color);
+  const sole = bootSole(tint);
   for (let i = 0; i < w * h; i++) {
     const up = M[i * 4] / 255;
     const so = M[i * 4 + 1] / 255;
@@ -339,7 +374,10 @@ export function shoeColorMap(
     for (let ch = 0; ch < 3; ch++) {
       const v = B[i * 4 + ch];
       let o: number;
-      if (look === "sneakers") o = v * (1 - up) + Math.min(255, tint[ch] * f) * up;
+      if (look === "boots") {
+        const inner = M[i * 4 + 2] / 255;
+        o = Math.min(255, (tint[ch] * up + sole[ch] * so + tint[ch] * 0.5 * inner) * f);
+      } else if (look === "sneakers") o = v * (1 - up) + Math.min(255, tint[ch] * f) * up;
       else {
         // 底は元の明るさの濃淡を少しだけ残す
         const sole = LEATHER_SOLE[ch] * (0.85 + 0.15 * (v / 255));
@@ -356,14 +394,14 @@ export function shoeColorMap(
 
 const normals = new Map<ShoeAsset, Map<ShoeLook, THREE.Texture>>();
 
-/** 凹凸の模様。革靴は甲の編み目を消す（縫い目や底の凹凸はそのまま） */
+/** 凹凸の模様。革靴は甲の編み目を消す（縫い目や底の凹凸はそのまま）。ブーツは革のしわのまま */
 function shoeNormalMap(asset: ShoeAsset, look: ShoeLook): THREE.Texture {
   let byLook = normals.get(asset);
   if (!byLook) normals.set(asset, (byLook = new Map()));
   let t = byLook.get(look);
   if (t) return t;
   const src = asset.normal;
-  if (look === "sneakers") t = canvasTexture(src, false);
+  if (look !== "leather") t = canvasTexture(src, false);
   else {
     const out = new ImageData(src.width, src.height);
     const M = asset.mask.data;
@@ -380,7 +418,7 @@ function shoeNormalMap(asset: ShoeAsset, look: ShoeLook): THREE.Texture {
   return t;
 }
 
-/** 靴の材質（スニーカー：布の甲とゴムの底。革靴：つやのある革と、濃い色の底） */
+/** 靴の材質（スニーカー：布の甲とゴムの底。革靴：つやのある革と、濃い色の底。ブーツ：使いこんだ革（粗さは元データのまま）） */
 export function shoeMaterial(
   asset: ShoeAsset,
   color: string,
@@ -388,6 +426,17 @@ export function shoeMaterial(
 ): THREE.MeshPhysicalMaterial {
   const map = shoeColorMap(asset, color, look);
   const normalMap = shoeNormalMap(asset, look);
+  if (look === "boots")
+    return new THREE.MeshPhysicalMaterial({
+      map,
+      normalMap,
+      aoMap: asset.orm,
+      roughnessMap: asset.orm,
+      roughness: 0.9,
+      metalness: 0,
+      clearcoat: 0.25,
+      clearcoatRoughness: 0.45,
+    });
   if (look === "leather")
     return new THREE.MeshPhysicalMaterial({
       map,
@@ -414,9 +463,11 @@ export function shoeMaterial(
 
 /**
  * 型の高さの変え方。履き口より上（かかとの上・ベロ・引き手）は低めにして、パンツのすそから突き出ないようにする。
- * 革靴はさらに底を薄くし（かかとは少し厚いまま）、甲は少し高くして足を収める
+ * 革靴はさらに底を薄くし（かかとは少し厚いまま）、甲は少し高くして足を収める。ブーツは変えない
  */
 export function shoeLift(look: ShoeLook): (y: number) => number {
+  // ブーツは筒が脚を包むので、そのまま
+  if (look === "boots") return (y) => y;
   const top = (y: number) => (y < 0.3 ? y : 0.3 + (y - 0.3) * 0.6);
   if (look === "sneakers") return top;
   const s = 0.09;

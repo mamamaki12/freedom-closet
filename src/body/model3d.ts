@@ -3,9 +3,9 @@
 import * as THREE from "three";
 import type { LookShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
-import { garmentPieces, Layers, underwear, type SwatchMatch, type UvMode } from "./garments";
+import { garmentPieces, Layers, underwear, type ShoeRoom, type SwatchMatch, type UvMode } from "./garments";
 import { fitHuman, loadHuman, type Fitted, type Human, type V3 } from "./human";
-import { fitShoe, shoeLift, shoeMaterial, type ShoeAsset } from "./shoe";
+import { fitShoe, shoeLift, shoeMaterial, type ShoeAsset, type ShoeLook, type ShoeModel } from "./shoe";
 import type { BodyScan } from "./types";
 
 export { Layers };
@@ -18,6 +18,10 @@ export interface Figure {
   fit: Fitted;
   /** 靴の3Dの型（読み込めたときだけ。ないときは足の形から作る） */
   shoe?: ShoeAsset;
+  /** ブーツの3Dの型（同じく、読み込めたときだけ） */
+  boot?: ShoeAsset;
+  /** はかせたブーツの筒の外側（ブーツをはかせたあとだけ。パンツのすそをかぶせるのに使う） */
+  shoeRoom?: ShoeRoom;
 }
 
 export async function prepareFigure(
@@ -157,49 +161,63 @@ function geometryOf(
   return g;
 }
 
-/** 本物の靴の3Dの型を使う靴の種類（ほかは足の形から作る） */
-const ASSET_SHOES: ReadonlySet<ShoeStyle> = new Set(["sneakers", "leather"]);
+/** 靴の種類ごとの、本物の靴の3Dの型（読み込めていなければ undefined。サンダルは足の形から作る） */
+function shoeAsset(fig: Figure, style: ShoeStyle): ShoeAsset | undefined {
+  return style === "boots" ? fig.boot : style === "sandals" ? undefined : fig.shoe;
+}
 
-function usesShoeAsset(fig: Figure, style: ShoeStyle): boolean {
-  return !!fig.shoe && ASSET_SHOES.has(style);
+/** 体の頂点の位置。靴をはくときは、足を少し小さくして靴から出ないようにする */
+function tuckFeet(fig: Figure, style: ShoeStyle | undefined): Float32Array {
+  const { human, fit } = fig;
+  const pos = new Float32Array(fit.body);
+  if (!style) return pos;
+  const m = fit.marks;
+  const asset = !!shoeAsset(fig, style);
+  const feet = asset || style === "sandals" ? [measureFoot(fig, -1), measureFoot(fig, 1)] : [];
+  const sandal = shoeSpec("sandals");
+  for (let i = 0; i < pos.length / 3; i++) {
+    if (human.body.parts[i * 4 + 2] < 0.5) continue;
+    const y = pos[i * 3 + 1];
+    const s = pos[i * 3] < 0 ? 0 : 1;
+    const f = m.foot[s];
+    if (style === "sandals") {
+      // サンダルは足が見えるので小さくせず、足の裏を中敷きの上にのせる（すねまでの間で少しずつ縮める）
+      const top = f.ankle[1] + 0.05;
+      if (y > top) continue;
+      const fs = feet[s];
+      const t = clamp((pos[i * 3 + 2] - fs.heelZ) / Math.max(1e-3, fs.toeZ - fs.heelZ), 0, 1);
+      pos[i * 3 + 1] = y + (sandal.sole(t) + FOOTBED) * (1 - y / top);
+      continue;
+    }
+    const top = f.ankle[1] + 0.012;
+    if (y > top) continue;
+    if (asset) {
+      // 靴の型は足の形どおりではないので、足を細く・低く・少し短くして、靴の中（底より上）に収める。
+      // 足首の上でもとの形になめらかにつなぐ（靴の履き口から見えるところ）
+      const fs = feet[s];
+      const w = smoothstep((top - y) / 0.02);
+      const t = (pos[i * 3 + 2] - fs.heelZ) / Math.max(1e-3, fs.toeZ - fs.heelZ);
+      const cx = footAt(fs, t).cx;
+      pos[i * 3] = cx + (pos[i * 3] - cx) * (1 - 0.25 * w);
+      // 足の裏は靴底の上へ（革靴は底が薄いので低めに）
+      const sole = style === "leather" ? 0.006 : 0.012;
+      pos[i * 3 + 1] = y * (1 - 0.25 * w) + sole * w;
+      pos[i * 3 + 2] = f.ankle[2] + (pos[i * 3 + 2] - f.ankle[2]) * (1 - 0.08 * w);
+      continue;
+    }
+    const k = 0.9;
+    pos[i * 3] = f.ankle[0] + (pos[i * 3] - f.ankle[0]) * k;
+    pos[i * 3 + 1] = y * 0.92 + 0.004;
+    pos[i * 3 + 2] = f.ankle[2] + (pos[i * 3 + 2] - f.ankle[2]) * k;
+  }
+  return pos;
 }
 
 /** マネキン本体（肌・目・下着がわりの薄い一枚）。靴をはくときは足を少し小さくして靴から出ないようにする */
 export function buildBody(fig: Figure, opts: { shoes?: ShoeStyle }): THREE.Group {
   const { human, fit } = fig;
   const g = new THREE.Group();
-  const pos = new Float32Array(fit.body);
-  if (opts.shoes) {
-    const m = fit.marks;
-    const asset = usesShoeAsset(fig, opts.shoes);
-    const feet = asset ? [measureFoot(fig, -1), measureFoot(fig, 1)] : [];
-    for (let i = 0; i < pos.length / 3; i++) {
-      if (human.body.parts[i * 4 + 2] < 0.5) continue;
-      const y = pos[i * 3 + 1];
-      const s = pos[i * 3] < 0 ? 0 : 1;
-      const f = m.foot[s];
-      const top = f.ankle[1] + 0.012;
-      if (y > top) continue;
-      if (asset) {
-        // 靴の型は足の形どおりではないので、足を細く・低く・少し短くして、靴の中（底より上）に収める。
-        // 足首の上でもとの形になめらかにつなぐ（靴の履き口から見えるところ）
-        const fs = feet[s];
-        const w = smoothstep((top - y) / 0.02);
-        const t = (pos[i * 3 + 2] - fs.heelZ) / Math.max(1e-3, fs.toeZ - fs.heelZ);
-        const cx = footAt(fs, t).cx;
-        pos[i * 3] = cx + (pos[i * 3] - cx) * (1 - 0.25 * w);
-        // 足の裏は靴底の上へ（革靴は底が薄いので低めに）
-        const sole = opts.shoes === "leather" ? 0.006 : 0.012;
-        pos[i * 3 + 1] = y * (1 - 0.25 * w) + sole * w;
-        pos[i * 3 + 2] = f.ankle[2] + (pos[i * 3 + 2] - f.ankle[2]) * (1 - 0.08 * w);
-        continue;
-      }
-      const k = 0.9;
-      pos[i * 3] = f.ankle[0] + (pos[i * 3] - f.ankle[0]) * k;
-      pos[i * 3 + 1] = y * 0.92 + 0.004;
-      pos[i * 3 + 2] = f.ankle[2] + (pos[i * 3 + 2] - f.ankle[2]) * k;
-    }
-  }
+  const pos = tuckFeet(fig, opts.shoes);
   const body = new THREE.Mesh(geometryOf(pos, human.body.index), SKIN);
   body.castShadow = true;
   g.add(body);
@@ -591,6 +609,380 @@ function ribbon(
   return g;
 }
 
+/** ブーツの筒の外側と脚とのすき間（革の厚みを含む。身長＝1。0.004 ≈ 7mm） */
+const SHAFT_GAP = 0.004;
+/** 筒の外側の面とみなす幅（いちばん外の点からこの幅の内側まで。ひもや引き手の出っぱりを外側の面と取り違えないように） */
+const SHAFT_SKIN = 0.004;
+/** 筒の内張りや細いみぞ（ファスナーなど）の底と、脚とのすき間（0.0015 ≈ 2.5mm） */
+const SHAFT_LINING = 0.0015;
+
+/** 切り口の線分の上に点を置く間隔（身長＝1。0.0015 ≈ 2.5mm） */
+const CUT_SPACING = 0.0015;
+
+/**
+ * 三角形の面を、axis の座標が y0 + k·step（k = 0〜n-1）の平らな面で切った切り口の点。
+ * axis が 1（高さ）なら x, z の並び、2（前後）なら x, y の並び。三角形ごとの切り口の線分の上にも
+ * CUT_SPACING おきに点を置く（大きな三角形の長い線分でも、どの向きにも点があるように）。keep で使う三角形を選ぶ
+ */
+function slices(
+  pos: ArrayLike<number>,
+  index: ArrayLike<number>,
+  y0: number,
+  step: number,
+  n: number,
+  keep: (a: number, b: number, c: number) => boolean = () => true,
+  axis: 1 | 2 = 1,
+): number[][] {
+  const other = axis === 1 ? 2 : 1;
+  const out = Array.from({ length: n }, () => [] as number[]);
+  const ends: number[] = [];
+  for (let f = 0; f < index.length; f += 3) {
+    const a = index[f];
+    const b = index[f + 1];
+    const c = index[f + 2];
+    const ya = pos[a * 3 + axis];
+    const yb = pos[b * 3 + axis];
+    const yc = pos[c * 3 + axis];
+    const k0 = Math.max(0, Math.ceil((Math.min(ya, yb, yc) - y0) / step));
+    const k1 = Math.min(n - 1, Math.floor((Math.max(ya, yb, yc) - y0) / step));
+    if (k0 > k1 || !keep(a, b, c)) continue;
+    for (let k = k0; k <= k1; k++) {
+      const h = y0 + k * step;
+      ends.length = 0;
+      for (const [u, v] of [
+        [a, b],
+        [b, c],
+        [c, a],
+      ]) {
+        const yu = pos[u * 3 + axis];
+        const yv = pos[v * 3 + axis];
+        if ((yu - h) * (yv - h) > 0 || yu === yv) continue;
+        const t = (h - yu) / (yv - yu);
+        ends.push(
+          pos[u * 3] + (pos[v * 3] - pos[u * 3]) * t,
+          pos[u * 3 + other] + (pos[v * 3 + other] - pos[u * 3 + other]) * t,
+        );
+      }
+      const cut = out[k];
+      for (let i = 0; i < ends.length; i++) cut.push(ends[i]);
+      if (ends.length < 4) continue;
+      const m = Math.floor(Math.hypot(ends[2] - ends[0], ends[3] - ends[1]) / CUT_SPACING);
+      for (let j = 1; j <= m; j++) {
+        const t = j / (m + 1);
+        cut.push(ends[0] + (ends[2] - ends[0]) * t, ends[1] + (ends[3] - ends[1]) * t);
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * 型の切り口（x, z の並び）の、中心 c のまわりの向きごとの半径。far はいちばん外の点（ひもや引き手の出っぱりも含む）、
+ * outer は外側の面：いちばん外の点から SHAFT_SKIN の内側までにある点のうち、いちばん内のもの
+ * （出っぱりを外側の面と取り違えないように）。点のない向きは 0
+ */
+function outerRadius(B: number[], c: [number, number], ns: number): { far: Float32Array; outer: Float32Array } {
+  const sectorOf = (x: number, z: number) =>
+    Math.floor(((Math.atan2(z - c[1], x - c[0]) / (Math.PI * 2) + 1) % 1) * ns) % ns;
+  const far = new Float32Array(ns);
+  const dist = new Float32Array(B.length / 2);
+  const sec = new Int32Array(B.length / 2);
+  for (let i = 0; i < B.length; i += 2) {
+    const k = sectorOf(B[i], B[i + 1]);
+    const r = Math.hypot(B[i] - c[0], B[i + 1] - c[1]);
+    dist[i / 2] = r;
+    sec[i / 2] = k;
+    far[k] = Math.max(far[k], r);
+  }
+  const outer = Float32Array.from(far);
+  for (let j = 0; j < dist.length; j++)
+    if (dist[j] >= far[sec[j]] - SHAFT_SKIN) outer[sec[j]] = Math.min(outer[sec[j]], dist[j]);
+  return { far, outer };
+}
+
+/** はかせたブーツの筒（高さ y0 + b·step ごとの脚の中心と、まわりの向き ns 等分ごとの、出っぱりも含めた外側の半径） */
+interface Shaft {
+  y0: number;
+  step: number;
+  nb: number;
+  ns: number;
+  center: [number, number][];
+  outer: Float32Array;
+  top: number;
+}
+
+/** パンツとブーツの筒とのすき間（身長＝1。0.002 ≈ 3mm） */
+const PANTS_GAP = 0.002;
+
+/**
+ * パンツのすそをかぶせるための、ブーツの筒の外側。筒の口より上は、布が口のふちから少しずつ脚へ戻るように、
+ * 高さとともに小さくする
+ */
+function shoeRoomOf(shafts: Map<1 | -1, Shaft>): ShoeRoom {
+  return (x, y, z) => {
+    const sh = shafts.get(x < 0 ? -1 : 1);
+    if (!sh || y < sh.y0 || y > sh.top + 0.05) return undefined;
+    const f = clamp((Math.min(y, sh.top) - sh.y0) / sh.step, 0, sh.nb - 1);
+    const b = Math.min(sh.nb - 2, Math.floor(f));
+    const u = f - b;
+    const C = sh.center;
+    const c: [number, number] = [lerp(C[b][0], C[b + 1][0], u), lerp(C[b][1], C[b + 1][1], u)];
+    const sf = ((Math.atan2(z - c[1], x - c[0]) / (Math.PI * 2) + 1) % 1) * sh.ns - 0.5;
+    const k = Math.floor(sf);
+    const v = sf - k;
+    const at = (bb: number, kk: number) => sh.outer[bb * sh.ns + (((kk % sh.ns) + sh.ns) % sh.ns)];
+    let r = lerp(lerp(at(b, k), at(b, k + 1), v), lerp(at(b + 1, k), at(b + 1, k + 1), v), u) + PANTS_GAP;
+    if (y > sh.top) r -= (y - sh.top) * 0.35;
+    return [c[0], c[1], r];
+  };
+}
+
+/**
+ * ブーツの筒を、脚が中に収まるように広げる。高さごとに脚と型の切り口を取り、脚のまわりの向きごとに、
+ * 型の外側の面が脚の外側よりすき間ぶん外にあるかを調べて、足りないところだけ脚の中心から外へ押し広げる。
+ * 型の内側の面（内張り）は写真から作ったもので本物より細いことがあるので、広げる量には使わず、
+ * 脚の中に入っている点を脚の外側まで出すだけにする（細いみぞの底も同じ。すき間から脚が見えないように）。
+ * 足首より下（足に合わせて置いたところ）はそのまま。body は足を靴に収めたあとの体の頂点
+ */
+function fitShaft(
+  geo: THREE.BufferGeometry,
+  fig: Figure,
+  side: 1 | -1,
+  body: Float32Array,
+): Shaft | undefined {
+  const p = geo.attributes.position as THREE.BufferAttribute;
+  const P = p.array as Float32Array;
+  const ankle = fig.fit.marks.foot[side < 0 ? 0 : 1].ankle;
+  let top = -Infinity;
+  for (let i = 0; i < p.count; i++) top = Math.max(top, P[i * 3 + 1]);
+  const y0 = ankle[1] - 0.004;
+  const STEP = 0.004;
+  const NB = Math.max(2, Math.ceil((top - y0) / STEP) + 1);
+  const NS = 24;
+  const parts = fig.human.body.parts;
+  const onLeg = (i: number) => parts[i * 4 + 2] >= 0.5 && Math.sign(body[i * 3]) === side;
+  const legCut = slices(body, fig.human.body.index, y0, STEP, NB, (a, b, c) => onLeg(a) && onLeg(b) && onLeg(c));
+  const bootCut = slices(P, geo.index!.array, y0, STEP, NB);
+  // 脚の切り口の中心（切り口のない高さは、となりの高さのもの）
+  const center: ([number, number] | undefined)[] = legCut.map((pts) => {
+    if (!pts.length) return undefined;
+    let x0 = Infinity;
+    let x1 = -Infinity;
+    let z0 = Infinity;
+    let z1 = -Infinity;
+    for (let i = 0; i < pts.length; i += 2) {
+      x0 = Math.min(x0, pts[i]);
+      x1 = Math.max(x1, pts[i]);
+      z0 = Math.min(z0, pts[i + 1]);
+      z1 = Math.max(z1, pts[i + 1]);
+    }
+    return [(x0 + x1) / 2, (z0 + z1) / 2];
+  });
+  const firstC = center.find((c) => c);
+  if (!firstC) return undefined;
+  for (let b = 0; b < NB; b++) center[b] ??= center[b - 1] ?? firstC;
+  const C = center as [number, number][];
+  const sectorOf = (x: number, z: number, c: [number, number]) =>
+    ((Math.atan2(z - c[1], x - c[0]) / (Math.PI * 2) + 1) % 1) * NS;
+  // 高さ・向きごとの広げる割合（1 より小さくはしない）と、脚のいちばん外の半径
+  let scale = new Float32Array(NB * NS).fill(1);
+  const legRs = new Float32Array(NB * NS);
+  for (let b = 0; b < NB; b++) {
+    const legR = legRs.subarray(b * NS, (b + 1) * NS);
+    const c = C[b];
+    const L = legCut[b];
+    for (let i = 0; i < L.length; i += 2) {
+      const k = Math.floor(sectorOf(L[i], L[i + 1], c)) % NS;
+      legR[k] = Math.max(legR[k], Math.hypot(L[i] - c[0], L[i + 1] - c[1]));
+    }
+    const { outer } = outerRadius(bootCut[b], c, NS);
+    for (let k = 0; k < NS; k++)
+      if (legR[k] > 0 && outer[k] > 1e-4)
+        scale[b * NS + k] = Math.max(1, (legR[k] + SHAFT_GAP) / outer[k]);
+  }
+  // 向き・高さのとなりとならして、型が波打たないようにする（押し広げが足りなくならないよう、元との大きいほう）
+  for (let pass = 0; pass < 3; pass++) {
+    const next = new Float32Array(NB * NS);
+    const at = (bb: number, kk: number) => scale[clamp(bb, 0, NB - 1) * NS + ((kk + NS) % NS)];
+    for (let b = 0; b < NB; b++)
+      for (let k = 0; k < NS; k++) {
+        const avg = (at(b, k) * 4 + at(b, k - 1) * 2 + at(b, k + 1) * 2 + at(b - 1, k) + at(b + 1, k)) / 10;
+        next[b * NS + k] = Math.max(avg, at(b, k));
+      }
+    scale = next;
+  }
+  const lerpC = (y: number): [number, number, number] => {
+    const f = clamp((y - y0) / STEP, 0, NB - 1);
+    const b = Math.min(NB - 2, Math.floor(f));
+    return [b, f - b, 0];
+  };
+  for (let i = 0; i < p.count; i++) {
+    const y = P[i * 3 + 1];
+    // 足首のところから少しずつ（足に合わせたところとなめらかにつなぐ）
+    const w = smoothstep((y - y0) / 0.016);
+    if (w <= 0) continue;
+    const [b, u] = lerpC(y);
+    const c: [number, number] = [lerp(C[b][0], C[b + 1][0], u), lerp(C[b][1], C[b + 1][1], u)];
+    const x = P[i * 3];
+    const z = P[i * 3 + 2];
+    const sf = sectorOf(x, z, c) - 0.5;
+    const k = Math.floor(sf);
+    const v = sf - k;
+    const grid = (a: Float32Array) => {
+      const at = (bb: number, kk: number) => a[bb * NS + (((kk % NS) + NS) % NS)];
+      return lerp(lerp(at(b, k), at(b, k + 1), v), lerp(at(b + 1, k), at(b + 1, k + 1), v), u);
+    };
+    let kk = 1 + (grid(scale) - 1) * w;
+    // 内張りや細いみぞ（ファスナーなど）の底が脚の中に入ると、すき間から脚が見えるので、脚の外側まで出す
+    const r = Math.hypot(x - c[0], z - c[1]);
+    const need = grid(legRs) + SHAFT_LINING;
+    if (r > 1e-6 && r * kk < need) kk = lerp(kk, need / r, w);
+    if (kk <= 1) continue;
+    P[i * 3] = c[0] + (x - c[0]) * kk;
+    P[i * 3 + 2] = c[1] + (z - c[1]) * kk;
+  }
+  p.needsUpdate = true;
+  // 仕上がった筒の外側（パンツのすそをかぶせるのに使う。ひもの結び目や引き手も布の下に隠れるように、
+  // いちばん外の点を、となりの向きとの大きいほうにする）
+  // 切り口のほか、頂点も上下の高さに入れる（細い出っぱりが切り口の高さのあいだにあっても隠れるように）
+  const cut = slices(P, geo.index!.array, y0, STEP, NB);
+  const far = new Float32Array(NB * NS);
+  for (let b = 0; b < NB; b++) far.set(outerRadius(cut[b], C[b], NS).far, b * NS);
+  for (let i = 0; i < p.count; i++) {
+    const y = P[i * 3 + 1];
+    if (y < y0 - STEP) continue;
+    const f = (y - y0) / STEP;
+    for (const b of [Math.floor(f), Math.ceil(f)]) {
+      if (b < 0 || b >= NB) continue;
+      const c = C[b];
+      const k = Math.floor(sectorOf(P[i * 3], P[i * 3 + 2], c)) % NS;
+      far[b * NS + k] = Math.max(far[b * NS + k], Math.hypot(P[i * 3] - c[0], P[i * 3 + 2] - c[1]));
+    }
+  }
+  const outer = new Float32Array(NB * NS);
+  for (let b = 0; b < NB; b++)
+    for (let k = 0; k < NS; k++)
+      outer[b * NS + k] = Math.max(far[b * NS + k], far[b * NS + ((k + 1) % NS)], far[b * NS + ((k + NS - 1) % NS)]);
+  return { y0, step: STEP, nb: NB, ns: NS, center: C, outer, top };
+}
+
+/** サンダルのベルトの寸法（身長＝1）：幅の半分・厚み・足とのすき間 */
+export const STRAP = { halfW: 0.009, thick: 0.0026, gap: 0.0006 };
+/** サンダルの中敷き（底の上の薄い一枚）の厚み */
+const FOOTBED = 0.0014;
+
+/**
+ * サンダルのベルトの通り道（z の平らな面の上の x, y）。足の切り口（中敷きより上）の凸包（輪ゴムをかけた形）の上側を、
+ * ベルトの厚みの半分とすき間ぶん外へずらし、角を丸める。本物のベルトと同じく、足の指のすき間やくぼみには入らない。
+ * 両はしは底の中までのばす
+ */
+export function strapPath(section: number[], floor: number): [number, number][] {
+  const pts: [number, number][] = [];
+  for (let i = 0; i < section.length; i += 2)
+    if (section[i + 1] >= floor - 0.001) pts.push([section[i], section[i + 1]]);
+  if (pts.length < 3) return [];
+  pts.sort((p, q) => p[0] - q[0] || p[1] - q[1]);
+  const cross = (o: [number, number], a: [number, number], b: [number, number]) =>
+    (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+  // 凸包の上側（左から右へ）
+  const hull: [number, number][] = [];
+  for (const q of pts) {
+    while (hull.length >= 2 && cross(hull[hull.length - 2], hull[hull.length - 1], q) >= 0) hull.pop();
+    hull.push(q);
+  }
+  // 両はしから底の中へまっすぐ下ろす
+  const sink = floor - 0.003;
+  const chain: [number, number][] = [[hull[0][0], sink], ...hull, [hull[hull.length - 1][0], sink]];
+  // 外へずらす（となりの辺の外向きの向きの平均）
+  const off = STRAP.gap + STRAP.thick / 2;
+  const edgeN = (i: number): [number, number] => {
+    const dx = chain[i + 1][0] - chain[i][0];
+    const dy = chain[i + 1][1] - chain[i][1];
+    const l = Math.hypot(dx, dy) || 1;
+    return [-dy / l, dx / l];
+  };
+  let path: [number, number][] = chain.map((q, i) => {
+    const a = edgeN(Math.max(0, i - 1));
+    const b = edgeN(Math.min(chain.length - 2, i));
+    let nx = a[0] + b[0];
+    let ny = a[1] + b[1];
+    const l = Math.hypot(nx, ny) || 1;
+    nx /= l;
+    ny /= l;
+    return [q[0] + nx * off, q[1] + ny * off];
+  });
+  // 角を丸める（Chaikin の角切り。両はしはそのまま）
+  for (let pass = 0; pass < 3; pass++) {
+    const next: [number, number][] = [path[0]];
+    for (let i = 0; i < path.length - 1; i++) {
+      const [p, q] = [path[i], path[i + 1]];
+      next.push([lerp(p[0], q[0], 0.25), lerp(p[1], q[1], 0.25)], [lerp(p[0], q[0], 0.75), lerp(p[1], q[1], 0.75)]);
+    }
+    next.push(path[path.length - 1]);
+    path = next;
+  }
+  return path;
+}
+
+/** 通り道（z = z0 の面の上）に沿った、角の丸い平たい帯。幅は z の向き */
+function strapTube(path: [number, number][], z0: number, halfW: number, thick: number): THREE.BufferGeometry {
+  const M = 16;
+  const e = 2 / 5;
+  const sgnPow = (v: number) => Math.sign(v) * Math.abs(v) ** e;
+  const pos: number[] = [];
+  const idx: number[] = [];
+  const n = path.length;
+  for (let i = 0; i < n; i++) {
+    const a = path[Math.max(0, i - 1)];
+    const b = path[Math.min(n - 1, i + 1)];
+    let tx = b[0] - a[0];
+    let ty = b[1] - a[1];
+    const l = Math.hypot(tx, ty) || 1;
+    tx /= l;
+    ty /= l;
+    // 帯の厚みの向き（通り道に垂直。上を通るときに上を向く側）
+    const nx = -ty;
+    const ny = tx;
+    for (let j = 0; j < M; j++) {
+      const th = (j / M) * Math.PI * 2;
+      const u = sgnPow(Math.cos(th)) * (thick / 2);
+      const w = sgnPow(Math.sin(th)) * halfW;
+      pos.push(path[i][0] + nx * u, path[i][1] + ny * u, z0 + w);
+    }
+  }
+  for (let i = 0; i < n - 1; i++)
+    for (let j = 0; j < M; j++) {
+      const a = i * M + j;
+      const b = i * M + ((j + 1) % M);
+      idx.push(a, a + M, b, b, a + M, b + M);
+    }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  g.setIndex(idx);
+  g.computeVertexNormals();
+  return g;
+}
+
+/**
+ * 靴の3Dの型を両足（右・左の順）に合わせて置く。ブーツは筒を脚の太さに合わせて広げ（足を靴に収めたあとの脚）、
+ * パンツのすそをかぶせるための筒の外側（room）も返す
+ */
+export function fitShoes(
+  fig: Figure,
+  model: ShoeModel,
+  look: ShoeLook,
+): { geos: THREE.BufferGeometry[]; room?: ShoeRoom } {
+  const body = look === "boots" ? tuckFeet(fig, "boots") : undefined;
+  const shafts = new Map<1 | -1, Shaft>();
+  const geos = ([-1, 1] as const).map((side) => {
+    const geo = fitShoe(model, measureFoot(fig, side), side, shoeLift(look));
+    const shaft = body && fitShaft(geo, fig, side, body);
+    if (shaft) shafts.set(side, shaft);
+    return geo;
+  });
+  return { geos, room: shafts.size ? shoeRoomOf(shafts) : undefined };
+}
+
 /** 靴。足の形を体のメッシュから測って作る。ブーツの筒はタイツの脚の部分を使う */
 function buildShoes(
   fig: Figure,
@@ -599,18 +991,18 @@ function buildShoes(
 ): THREE.Group {
   const g = new THREE.Group();
   const style = shape.style;
-  if (fig.shoe && usesShoeAsset(fig, style)) {
-    // スニーカー・革靴は本物の靴の3Dの型を、足の長さ・幅・向きに合わせて置く（革靴は底を薄く、表面を革に）
-    const look = style === "leather" ? "leather" : "sneakers";
-    const mat = shoeMaterial(fig.shoe, paint.tone ?? paint.color, look);
-    for (const side of [-1, 1] as const) {
-      const m = new THREE.Mesh(
-        fitShoe(fig.shoe.model, measureFoot(fig, side), side, shoeLift(look)),
-        mat,
-      );
+  const asset = shoeAsset(fig, style);
+  if (asset) {
+    // スニーカー・革靴・ブーツは本物の靴の3Dの型を、足の長さ・幅・向きに合わせて置く（革靴は底を薄く、表面を革に）
+    const look = style === "leather" ? "leather" : style === "boots" ? "boots" : "sneakers";
+    const mat = shoeMaterial(asset, paint.tone ?? paint.color, look);
+    const { geos, room } = fitShoes(fig, asset.model, look);
+    for (const geo of geos) {
+      const m = new THREE.Mesh(geo, mat);
       m.castShadow = true;
       g.add(m);
     }
+    fig.shoeRoom = room;
     return g;
   }
   const spec = shoeSpec(style);
@@ -625,11 +1017,28 @@ function buildShoes(
     sheen: style === "sneakers" ? 0.2 : 0,
     side: THREE.DoubleSide,
   });
+  const sandals = style === "sandals";
   const soleMat = new THREE.MeshStandardMaterial({
-    color: spec.soleColor,
-    roughness: style === "sneakers" ? 0.65 : 0.5,
+    // サンダルの底はベルトと同じ色の仲間（少し濃く）。ほかは靴の種類ごとの色
+    color: sandals ? base.clone().lerp(new THREE.Color("#3a3330"), 0.35) : spec.soleColor,
+    roughness: style === "sneakers" ? 0.65 : sandals ? 0.8 : 0.5,
     metalness: 0,
   });
+  // サンダルの中敷き：ベルトの色を少し明るく、くすませた色
+  const bedMat = sandals
+    ? new THREE.MeshStandardMaterial({
+        color: base.clone().lerp(new THREE.Color("#d9cfc0"), 0.18),
+        roughness: 0.9,
+        metalness: 0,
+      })
+    : undefined;
+  // サンダルのベルトは、足を中敷きの上にのせたあとの足に沿わせる
+  const feet = sandals ? tuckFeet(fig, style) : undefined;
+  const parts = fig.human.body.parts;
+  const onFoot = (i: number, s: 0 | 1) =>
+    parts[i * 4 + 2] >= 0.5 &&
+    (feet![i * 3] < 0 ? 0 : 1) === s &&
+    feet![i * 3 + 1] < fig.fit.marks.foot[s].ankle[1] + 0.02;
   // 靴ひものところ：濃い靴なら明るく、明るい靴なら少し濃く
   const light = (base.r + base.g + base.b) / 3 > 0.6;
   const laceMat = new THREE.MeshStandardMaterial({
@@ -654,29 +1063,42 @@ function buildShoes(
     const fs = measureFoot(fig, side);
     add(
       loft(soleStations(fs, spec), {
-        power: 3.2,
+        // サンダルの底は角を少し立てる（ふちの厚みが見えるように）
+        power: sandals ? 4.5 : 3.2,
         capStart: true,
         capEnd: true,
       }),
       soleMat,
     );
     if (style === "sandals") {
-      // ベルトを2本、甲の上にわたす
-      for (const t of [0.5, 0.72]) {
+      // 底の上に中敷き（少し明るい色）を重ね、ベルトを2本、足の甲に沿わせてわたす
+      const bed = soleStations(fs, spec).map((st) => ({
+        ...st,
+        c: [st.c[0], st.rz * 2 + FOOTBED / 2 - 0.0006, st.c[2]] as V3,
+        rx: Math.max(0.002, st.rx - 0.0022),
+        rz: FOOTBED / 2,
+      }));
+      add(loft(bed, { power: 6, capStart: true, capEnd: true }), bedMat!);
+      const sideIdx = side < 0 ? 0 : 1;
+      for (const t of [0.45, 0.66]) {
         const f = footAt(fs, t);
-        const soleTop = spec.sole(t);
-        const rx = f.halfW + spec.pad + 0.002;
-        const ry = f.top + spec.pad + 0.002 - soleTop;
-        const pts: V3[] = [];
-        for (let k = 0; k <= 10; k++) {
-          const th = Math.PI - (k / 10) * Math.PI;
-          pts.push([
-            f.cx + rx * Math.cos(th),
-            soleTop - 0.002 + ry * Math.sin(th),
-            f.z,
-          ]);
-        }
-        add(ribbon(pts, [0, 0, 1], 0.007, 0.002), upperMat);
+        const floor = spec.sole(t) + FOOTBED;
+        // ベルトの幅のぶん、前・まん中・後ろで足を切って、いちばん外を通す
+        const section: number[] = [];
+        for (const dz of [-STRAP.halfW, 0, STRAP.halfW])
+          section.push(
+            ...slices(
+              feet!,
+              fig.human.body.index,
+              f.z + dz,
+              1,
+              1,
+              (a, b, c) => onFoot(a, sideIdx) && onFoot(b, sideIdx) && onFoot(c, sideIdx),
+              2,
+            )[0],
+          );
+        const path = strapPath(section, floor);
+        if (path.length >= 2) add(strapTube(path, f.z, STRAP.halfW, STRAP.thick), upperMat);
       }
       continue;
     }
@@ -794,6 +1216,7 @@ export function buildGarment(
       tile: paint.tile,
       sleeveTile: paint.sleeveTile ?? paint.tile,
       swatchMatch: paint.swatchMatch,
+      shoeRoom: fig.shoeRoom,
     },
     layers,
   )) {

@@ -393,12 +393,14 @@ export async function buildScene(
   scene.add(blob);
 
   const fig = await prepareFigure(scan, profile, opts);
-  // 靴の3Dの型（スニーカー・革靴）。読み込めないときは足の形から作る
-  if (opts.shoeModel !== false && items.some((g) => g.category === "shoes"))
-    fig.shoe = await loadShoe().catch(() => undefined);
   const person = new THREE.Group();
   const shoes = items.find((g) => g.category === "shoes");
   const shoeShape = shoes && lookShape(shoes);
+  // 靴の3Dの型（スニーカー・革靴はスニーカーの型、ブーツはブーツの型）。読み込めないときは足の形から作る
+  if (opts.shoeModel !== false && shoeShape?.kind === "shoes") {
+    if (shoeShape.style === "boots") fig.boot = await loadShoe("boot").catch(() => undefined);
+    else if (shoeShape.style !== "sandals") fig.shoe = await loadShoe().catch(() => undefined);
+  }
   person.add(
     buildBody(fig, {
       shoes: shoeShape?.kind === "shoes" ? shoeShape.style : undefined,
