@@ -64,12 +64,13 @@ export async function deleteWear(day: string): Promise<void> {
   await (await db()).delete("wear", day);
 }
 
-/** バックアップから戻す。同じIDのものは上書きし、ほかはそのまま残す */
-export async function importAll(garments: Garment[], feedback: Feedback[]): Promise<void> {
-  const tx = (await db()).transaction(["garments", "feedback"], "readwrite");
+/** バックアップから戻す。同じIDのもの（着た記録は同じ日）は上書きし、ほかはそのまま残す */
+export async function importAll(garments: Garment[], feedback: Feedback[], wear: WearRecord[] = []): Promise<void> {
+  const tx = (await db()).transaction(["garments", "feedback", "wear"], "readwrite");
   await Promise.all([
     ...garments.map((g) => tx.objectStore("garments").put(g)),
     ...feedback.map((f) => tx.objectStore("feedback").put(f)),
+    ...wear.map((w) => tx.objectStore("wear").put(w)),
     tx.done,
   ]);
 }

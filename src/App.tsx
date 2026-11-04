@@ -12,11 +12,13 @@ import { BodyScanScreen } from "./screens/BodyScanScreen";
 import { ClosetScreen } from "./screens/ClosetScreen";
 import { EditGarment } from "./screens/EditGarment";
 import { OutfitScreen } from "./screens/OutfitScreen";
-import { BackupPanel } from "./screens/BackupPanel";
+import { BackupPanel, exportBackup, restoreMessage } from "./screens/BackupPanel";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
 import { lookPhotoFinder } from "./shop/lookPhotos";
 import { addRecord, updateFinal } from "./storage/analysisLog";
+import { mergeProfile } from "./storage/backup";
+import { backupReminder, loadBackupSnooze, loadLastBackup, saveLastBackup, snoozeBackupReminder } from "./storage/backupReminder";
 import * as db from "./storage/db";
 import { loadBodyScan, saveBodyScan } from "./storage/bodyScan";
 import { loadProfile, saveProfile } from "./storage/profile";
@@ -46,6 +48,8 @@ export function App() {
   /** 体の写真から作った体型（数字だけ）。外には送らない */
   const [bodyScan, setBodyScan] = useState<BodyScan | undefined>(loadBodyScan);
   const [notice, setNotice] = useState<string>();
+  const [lastBackupAt, setLastBackupAt] = useState(loadLastBackup);
+  const [backupSnooze, setBackupSnooze] = useState(loadBackupSnooze);
 
   const ai = useMemo(
     () => createAI(settings, (e) => setNotice(`Claudeにつながらなかったので端末内AIで続けました（${errorMessage(e)}）`)),
@@ -65,6 +69,18 @@ export function App() {
 
   // 似た着こなし写真の検索にも、中継サーバーの合言葉を使う
   useEffect(() => lookPhotoFinder.setAccessCode(settings.accessCode), [settings.accessCode]);
+
+  const backupData = { garments, feedback, wears, profile };
+  const reminder = backupReminder(garments, lastBackupAt, backupSnooze);
+  const markBackedUp = (at = Date.now()) => setLastBackupAt(saveLastBackup(at));
+  const backupNow = async () => {
+    try {
+      setNotice(await exportBackup(backupData));
+      markBackedUp();
+    } catch (e) {
+      setNotice(`書き出せませんでした（${errorMessage(e)}）`);
+    }
+  };
 
   // 「今日はこれ」。1日1件で、同じ日にもう一度押したら上書き、null なら取り消し
   const wearToday = async (o: Outfit | null) => {
@@ -165,6 +181,9 @@ export function App() {
             wears={wears}
             onAdd={(files) => setSheet({ kind: "add", files })}
             onEdit={(garment) => setSheet({ kind: "edit", garment })}
+            backupReminder={reminder}
+            onBackupNow={backupNow}
+            onSnoozeBackup={() => setBackupSnooze(snoozeBackupReminder())}
           />
         ) : tab === "outfit" ? (
           <OutfitScreen
@@ -207,7 +226,21 @@ export function App() {
               saveAISettings(s);
             }}
           >
-            <BackupPanel garments={garments} feedback={feedback} onImported={reload} />
+            <BackupPanel
+              data={backupData}
+              lastBackupAt={lastBackupAt}
+              onExported={() => markBackedUp()}
+              onImported={async (restored) => {
+                await reload();
+                const merged = mergeProfile(profile, restored.profile);
+                setProfile(merged);
+                saveProfile(merged);
+                markBackedUp(restored.exportedAt);
+                // 戻した服をすぐ見られるよう、クローゼットに移って知らせる
+                setNotice(restoreMessage(restored));
+                setTab("closet");
+              }}
+            />
           </SettingsScreen>
         )}
       </main>

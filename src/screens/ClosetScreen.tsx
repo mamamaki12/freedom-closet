@@ -1,10 +1,11 @@
 // クローゼット。種類ごとに並べる。上の絞り込みで「確認したい服」「しばらく着ていない服」だけも見られる。
-import { HelpCircle, Plus } from "lucide-react";
+import { Archive, HelpCircle, Plus } from "lucide-react";
 import { useState } from "react";
 import { GarmentThumb } from "../components/common";
 import { ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
 import { daysAgoLabel, idleGarments, lastWornMap } from "../domain/wear";
+import type { BackupReminder } from "../storage/backupReminder";
 import { PhotoPickers } from "./AddGarments";
 
 type Filter = "all" | "review" | "idle" | Category;
@@ -14,12 +15,19 @@ export function ClosetScreen({
   wears,
   onAdd,
   onEdit,
+  backupReminder,
+  onBackupNow,
+  onSnoozeBackup,
 }: {
   garments: Garment[];
   wears: WearRecord[];
   /** 写真を選んでから開くときは files が入る */
   onAdd: (files?: File[]) => void;
   onEdit: (g: Garment) => void;
+  /** しばらくバックアップしていないときのお知らせ */
+  backupReminder?: BackupReminder | null;
+  onBackupNow?: () => void;
+  onSnoozeBackup?: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -63,6 +71,25 @@ export function ClosetScreen({
           服を追加
         </button>
       </div>
+
+      {backupReminder && (
+        <div className="banner" role="status" style={{ cursor: "default" }}>
+          <Archive {...ICON} />
+          <span className="grow">
+            {backupReminder.kind === "never"
+              ? "服の写真は、この端末の中にだけ保存されています。機種変更や故障に備えて、バックアップを書き出しておきましょう。"
+              : `前回のバックアップから${backupReminder.days}日たち、そのあと服が増えました。新しいバックアップを書き出しておきましょう。`}
+            <span className="row" style={{ gap: 8, marginTop: 6 }}>
+              <button type="button" className="btn small primary" onClick={onBackupNow}>
+                書き出す
+              </button>
+              <button type="button" className="btn small ghost" onClick={onSnoozeBackup}>
+                あとで
+              </button>
+            </span>
+          </span>
+        </div>
+      )}
 
       {review.length > 0 && active !== "review" && (
         <button className="banner" onClick={() => setFilter("review")}>
