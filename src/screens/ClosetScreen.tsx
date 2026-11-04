@@ -28,7 +28,7 @@ export function ClosetScreen({
       <section className="panel">
         <h2>まずは服を登録しましょう</h2>
         <p className="hint">写真を選ぶと、種類と色と柄は自動で入ります。アルバムからなら何枚でもまとめて選べます。</p>
-        <PhotoPickers onPick={(files) => files?.length && onAdd([...files])} />
+        <PhotoPickers onPick={onAdd} />
         <p className="hint">トップス・ボトムスを2〜3着ずつ入れると、コーデを提案できるようになります。</p>
       </section>
     );

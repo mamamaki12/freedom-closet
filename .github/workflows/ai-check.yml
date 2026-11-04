@@ -1,0 +1,38 @@
+# 端末内AIの確認。Hugging Face から実際のモデルを取り、
+# 1) 同梱した説明文の数値（src/ai/local/textEmbeddings.json）がモデルの計算と合っているか
+# 2) 公開データセットの服の写真で、種類の正解率がどれくらいか
+# を調べる。手で実行（Actions → AI check → Run workflow）か、端末内AIのコードを変えた PR で動く。
+name: AI check
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/ai/local/**"
+      - "scripts/**"
+      - ".github/workflows/ai-check.yml"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: モデルのファイルの大きさ（端末がダウンロードする量の目安）
+        run: |
+          for f in vision_model_fp16.onnx vision_model_quantized.onnx vision_model.onnx model_quantized.onnx model_fp16.onnx text_model_quantized.onnx; do
+            size=$(curl -sIL "https://huggingface.co/Xenova/clip-vit-base-patch32/resolve/main/onnx/$f" | grep -i '^content-length' | tail -1 | tr -dc '0-9')
+            echo "$f: $(( ${size:-0} / 1000000 )) MB"
+          done
+      - name: 同梱の説明文の数値がモデルと合っているか
+        run: npx tsx scripts/text-embeddings.ts --check
+      - name: 服の写真で種類の正解率を測る
+        run: |
+          git clone -q --depth 1 --filter=blob:none --sparse https://github.com/alexeygrigorev/clothing-dataset-small /tmp/clothing
+          git -C /tmp/clothing sparse-checkout set test
+          npx tsx scripts/eval-local-ai.ts /tmp/clothing/test
