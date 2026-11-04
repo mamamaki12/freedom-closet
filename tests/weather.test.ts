@@ -21,6 +21,14 @@ describe("fetchWeather", () => {
     const f = vi.fn(async () => new Response(JSON.stringify({})));
     await expect(fetchWeather(35, 139, f as unknown as typeof fetch)).rejects.toThrow("形式");
   });
+  it("通信できないときは、英語のエラーではなく、代わりに選べることを伝える", async () => {
+    const down = vi.fn(async () => {
+      throw new TypeError("Load failed");
+    });
+    await expect(fetchWeather(35, 139, down as unknown as typeof fetch)).rejects.toThrow("「寒い〜暑い」からも選べます");
+    const busy = vi.fn(async () => new Response("", { status: 503 }));
+    await expect(fetchWeather(35, 139, busy as unknown as typeof fetch)).rejects.toThrow("（503）。気温は上の「寒い〜暑い」からも選べます");
+  });
 });
 
 describe("outingTemperature", () => {

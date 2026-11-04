@@ -1,12 +1,14 @@
-import { Cloud, Settings, Shirt, ShoppingBag, Smartphone, Sparkles, X, type LucideIcon } from "lucide-react";
+import { Cloud, Settings, Shirt, ShoppingBag, Smartphone, Sparkles, Undo2, X, type LucideIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
 import { ICON } from "./components/icons";
 import type { BodyScan } from "./body/types";
+import { shortLabel } from "./domain/colors";
 import type { Profile } from "./domain/profile";
 import type { Feedback, Garment, Outfit, WearRecord } from "./domain/types";
 import { dayKey } from "./domain/wear";
+import { requestPersistentStorage } from "./pwa";
 import { AddGarments } from "./screens/AddGarments";
 import { BodyScanScreen } from "./screens/BodyScanScreen";
 import { ClosetScreen } from "./screens/ClosetScreen";
@@ -48,6 +50,8 @@ export function App() {
   /** 体の写真から作った体型（数字だけ）。外には送らない */
   const [bodyScan, setBodyScan] = useState<BodyScan | undefined>(loadBodyScan);
   const [notice, setNotice] = useState<string>();
+  /** 消した服を元に戻せるよう、少しの間だけ覚えておく */
+  const [undo, setUndo] = useState<{ garment: Garment; label: string }>();
   const [lastBackupAt, setLastBackupAt] = useState(loadLastBackup);
   const [backupSnooze, setBackupSnooze] = useState(loadBackupSnooze);
 
@@ -69,6 +73,13 @@ export function App() {
 
   // 似た着こなし写真の検索にも、中継サーバーの合言葉を使う
   useEffect(() => lookPhotoFinder.setAccessCode(settings.accessCode), [settings.accessCode]);
+
+  // 「元に戻す」は少しのあいだだけ出す
+  useEffect(() => {
+    if (!undo) return;
+    const t = setTimeout(() => setUndo(undefined), 15_000);
+    return () => clearTimeout(t);
+  }, [undo]);
 
   const backupData = { garments, feedback, wears, profile };
   const reminder = backupReminder(garments, lastBackupAt, backupSnooze);
@@ -108,6 +119,30 @@ export function App() {
           </button>
         </div>
       )}
+      {undo && (
+        <div className="notice" role="status">
+          <span className="grow">「{undo.label}」を削除しました</span>
+          <button
+            className="btn small"
+            onClick={async () => {
+              const { garment } = undo;
+              setUndo(undefined);
+              try {
+                await db.saveGarment(garment);
+                await reload();
+              } catch (e) {
+                setNotice(`元に戻せませんでした（${errorMessage(e)}）`);
+              }
+            }}
+          >
+            <Undo2 {...ICON} />
+            元に戻す
+          </button>
+          <button className="icon-btn" onClick={() => setUndo(undefined)} aria-label="閉じる" title="閉じる">
+            <X {...ICON} />
+          </button>
+        </div>
+      )}
 
       <main>
         {sheet?.kind === "add" ? (
@@ -117,6 +152,8 @@ export function App() {
             initialFiles={sheet.files}
             onSave={async (g, analysis) => {
               await db.saveGarment(g);
+              // 服が入ったら、ブラウザに長期保存をもう一度お願いする（使い始めてからのほうが認められやすい）
+              void requestPersistentStorage();
               if (analysis) {
                 // 判定の記録（検証用）。記録に失敗しても登録は続ける
                 await addRecord({
@@ -155,9 +192,11 @@ export function App() {
               setSheet(null);
             }}
             onDelete={async () => {
-              await db.deleteGarment(sheet.garment.id);
+              const deleted = sheet.garment;
+              await db.deleteGarment(deleted.id);
               await reload();
               setSheet(null);
+              setUndo({ garment: deleted, label: shortLabel(deleted) });
             }}
             onStyle={() => {
               setStyleWith((cur) => ({ ids: [sheet.garment.id], n: cur.n + 1 }));
@@ -181,6 +220,7 @@ export function App() {
             wears={wears}
             onAdd={(files) => setSheet({ kind: "add", files })}
             onEdit={(garment) => setSheet({ kind: "edit", garment })}
+            setupNote={ai.setupNote?.()}
             backupReminder={reminder}
             onBackupNow={backupNow}
             onSnoozeBackup={() => setBackupSnooze(snoozeBackupReminder())}

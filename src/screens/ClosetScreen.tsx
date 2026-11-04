@@ -15,6 +15,7 @@ export function ClosetScreen({
   wears,
   onAdd,
   onEdit,
+  setupNote,
   backupReminder,
   onBackupNow,
   onSnoozeBackup,
@@ -24,6 +25,8 @@ export function ClosetScreen({
   /** 写真を選んでから開くときは files が入る */
   onAdd: (files?: File[]) => void;
   onEdit: (g: Garment) => void;
+  /** AIを使い始める前に知らせること（初回のダウンロードなど） */
+  setupNote?: string;
   /** しばらくバックアップしていないときのお知らせ */
   backupReminder?: BackupReminder | null;
   onBackupNow?: () => void;
@@ -37,6 +40,7 @@ export function ClosetScreen({
         <h2>まずは服を登録しましょう</h2>
         <p className="hint">写真を選ぶと、種類と色と柄は自動で入ります。アルバムからなら何枚でもまとめて選べます。</p>
         <PhotoPickers onPick={onAdd} />
+        {setupNote && <p className="hint">{setupNote}</p>}
         <p className="hint">トップス・ボトムスを2〜3着ずつ入れると、コーデを提案できるようになります。</p>
       </section>
     );

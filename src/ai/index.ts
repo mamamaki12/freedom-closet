@@ -34,6 +34,7 @@ export function withFallback(primary: ClosetAI, fallback: ClosetAI, onFallback?:
     label: primary.label,
     sendsPhotosOffDevice: primary.sendsPhotosOffDevice,
     prepare: () => primary.prepare?.(),
+    setupNote: () => primary.setupNote?.(),
     analyzeGarment: (photo, o) => run((ai) => ai.analyzeGarment(photo, o), o?.signal),
     suggestOutfits: (input, o) => run((ai) => ai.suggestOutfits(input, o), o?.signal),
     suggestPurchases: (input, o) => run((ai) => ai.suggestPurchases(input, o), o?.signal),

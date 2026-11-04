@@ -1,6 +1,6 @@
 // 服の登録。写真を選ぶだけで、AIが種類と色を判定してそのまま登録する。
 // 直したいときは、あとからタップして直す。種類が分からなかった写真だけ、1回タップで選んでもらう。
-import { ArrowLeft, Ban, Camera, Check, Images, X } from "lucide-react";
+import { ArrowLeft, Ban, Camera, Check, Images, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
@@ -102,7 +102,9 @@ export function AddGarments({
     /** 自動判定のまま登録するとき true（本人が種類を選んだときは false） */
     auto = false,
   ) {
-    const garment = toGarment(photo, draft, profile, auto && analysis ? { confidence: analysis.result.confidence } : undefined);
+    const made = toGarment(photo, draft, profile, auto && analysis ? { confidence: analysis.result.confidence } : undefined);
+    // 判定できなかった（色も分からなかった）服は、あとで見直せるよう「確認」の目印を付ける
+    const garment: Garment = analysis ? made : { ...made, needsReview: true };
     await onSave(garment, analysis);
     update(it.key, { state: "saved", garment, draft, photo });
   }
@@ -115,18 +117,25 @@ export function AddGarments({
     runningRef.current = true;
     update(next.key, { state: "analyzing" });
     const { signal } = abortRef.current;
+    let shrunk = next.photo;
+    let analyzed: Pick<Item, "analysis" | "elapsedMs" | "draft"> | undefined;
     // 先に写真を縮めておく（保存する容量を減らし、判定も速くなる）
     shrinkPhoto(next.photo)
       .then(async (photo) => {
+        shrunk = photo;
         const started = performance.now();
         const a = await ai.analyzeGarment(photo, { signal, onProgress: (p) => update(next.key, { progress: p }) });
         const elapsedMs = performance.now() - started;
+        analyzed = { analysis: a, elapsedMs, draft: { ...EMPTY_DRAFT, ...colorsFromAnalysis(a) } };
         const draft = draftFromAnalysis(a);
         if (draft) await save(next, draft, { result: a, elapsedMs }, photo, true);
         else update(next.key, { state: "needsType", analysis: a, elapsedMs, photo, draft: { ...EMPTY_DRAFT, ...colorsFromAnalysis(a) } });
       })
       // 中断されたとき（開発時の再マウントなど）は、もう一度判定しなおす
-      .catch((e) => update(next.key, signal.aborted ? { state: "waiting" } : { state: "failed", error: errorMessage(e) }))
+      // 失敗しても、縮めた写真と（判定はできて保存だけ失敗したときは）判定した色は残す
+      .catch((e) =>
+        update(next.key, signal.aborted ? { state: "waiting" } : { state: "failed", error: errorMessage(e), photo: shrunk, ...analyzed }),
+      )
       .finally(() => {
         runningRef.current = false;
         // 次の写真へ進めるため、もう一度この effect を走らせる
@@ -139,6 +148,8 @@ export function AddGarments({
     setItems((cur) => [...cur, ...added]);
   };
   const remove = (key: string) => setItems((cur) => cur.filter((it) => it.key !== key));
+  // 通信が戻ったときなどに、もう一度判定する
+  const retry = (key: string) => update(key, { state: "waiting", error: undefined, analysis: undefined, progress: undefined });
 
   const saved = items.filter((it) => it.state === "saved").length;
   const unsure = items.filter((it) => it.garment?.needsReview).length;
@@ -162,6 +173,7 @@ export function AddGarments({
         <>
           <PhotoPickers onPick={addPhotos} />
           <p className="hint">写真を選ぶだけで、種類と色を判定して登録します。無地の壁や床の上に1着ずつ置いて撮ると当たりやすくなります。</p>
+          {ai.setupNote?.() && <p className="hint">{ai.setupNote()}</p>}
           <div className="actions">
             <button className="btn ghost" onClick={() => onDone(0)}>
               <ArrowLeft {...ICON} />
@@ -193,6 +205,7 @@ export function AddGarments({
                 ).catch((e) => update(it.key, { state: "failed", error: errorMessage(e) }))
               }
               onRemove={() => remove(it.key)}
+              onRetry={() => retry(it.key)}
             />
           ))}
 
@@ -237,23 +250,46 @@ function ChooseType({
   rest,
   onChoose,
   onRemove,
+  onRetry,
 }: {
   item: Item;
   /** このあとに残っている枚数 */
   rest: number;
   onChoose: (p: Preset) => void;
   onRemove: () => void;
+  /** もう一度判定する（ほかの写真を判定中なら、その次に回す） */
+  onRetry: () => void;
 }) {
   const url = usePhotoUrl(item.photo);
+  const failed = item.state === "failed";
+  // 判定できなかったとき・モデルを読み込めなかったときは、もう一度試すと直ることがある（服ではないと判定されたときは同じ答えになる）
+  const canRetry = failed || (item.analysis?.candidates.length === 0 && !!item.analysis.warning);
   return (
     <div className="choose">
       <div className="row">
         {url && <img className="choose-photo" src={url} alt="種類が分からなかった服" />}
         <div className="grow">
           <p>
-            {item.state === "failed" ? "うまく判定できませんでした。" : item.analysis?.warning ?? "種類だけ分かりませんでした。"}どれですか？
+            {failed
+              ? item.analysis
+                ? "保存できませんでした。"
+                : "うまく判定できませんでした。"
+              : (item.analysis?.warning ?? "種類だけ分かりませんでした。")}
+            どれですか？
             {rest > 0 && <span className="hint">（このあと{rest}枚）</span>}
           </p>
+          {failed && item.error && (
+            <p className="hint">
+              理由：{item.error}
+              {!item.analysis && "　色も分からなかったので、登録したあとで直してください。"}
+            </p>
+          )}
+          {canRetry && (
+            <button className="btn ghost small" onClick={onRetry}>
+              <RotateCcw {...ICON} />
+              もう一度判定する
+            </button>
+          )}
           <button className="btn ghost small" onClick={onRemove}>
             <Ban {...ICON} />
             服ではない・やめる
