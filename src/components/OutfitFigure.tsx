@@ -196,8 +196,7 @@ function layersFor(items: Garment[], b: Body): Layer[] {
         add(
           g,
           [
-            armPath(b, -1, 1, 1.5 + loose),
-            armPath(b, 1, 1, 1.5 + loose),
+            ...(s.sleeve === "none" ? [] : [armPath(b, -1, 1, 1.5 + loose), armPath(b, 1, 1, 1.5 + loose)]),
             torsoPath(b, hem, loose, flare, -1),
             torsoPath(b, hem, loose, flare, 1),
           ],

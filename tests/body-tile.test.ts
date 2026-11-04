@@ -1,6 +1,6 @@
 // 生地の見本を、つなぎ目なくくり返せる模様にする計算（柄の傾き・くり返しの長さ・つなぎ目）
 import { describe, expect, it } from "vitest";
-import { patternTilt, repeatLength, seamlessTile, type Rgba } from "../src/body/tile";
+import { patternTilt, plainCloth, repeatLength, seamlessTile, softenWrinkles, type Rgba } from "../src/body/tile";
 
 function image(w: number, h: number, paint: (x: number, y: number) => number | [number, number, number]): Rgba {
   const data = new Uint8ClampedArray(w * h * 4);
@@ -139,5 +139,51 @@ describe("つなぎ目のない模様", () => {
       expect(px(tile, x, 0)).toEqual(px(src, x, 0));
       expect(d2(px(tile, x, tile.height - 1), px(src, x, 11))).toBeLessThan(10);
     }
+  });
+});
+
+describe("無地の生地のしわ", () => {
+  /** 灰色の無地に、ななめのしわ（やわらかい濃淡）と細かい織り目 */
+  function wrinkled(w: number, h: number): Rgba {
+    const rnd = random(5);
+    const grain = Array.from({ length: w * h }, () => (rnd() - 0.5) * 10);
+    return image(w, h, (x, y) => {
+      const crease = Math.exp(-(((x * 0.8 + y * 0.6 - 60) / 5) ** 2)) * -28 + Math.exp(-(((x * 0.7 - y * 0.7 + 20) / 7) ** 2)) * -18;
+      return 150 + crease + grain[y * w + x];
+    });
+  }
+  const lowSpread = (img: Rgba) => {
+    // 7画素四方でぼかした明るさのばらつき（しわの濃淡）と、となりの画素との差（織り目）
+    const { width: w, height: h } = img;
+    const L = (x: number, y: number) => px(img, ((x % w) + w) % w, ((y % h) + h) % h)[0];
+    let s = 0;
+    let s2 = 0;
+    let fine = 0;
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        let b = 0;
+        for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) b += L(x + dx, y + dy);
+        b /= 49;
+        s += b;
+        s2 += b * b;
+        fine += Math.abs(L(x + 1, y) - L(x, y));
+      }
+    const n = w * h;
+    return { low: Math.sqrt(s2 / n - (s / n) ** 2), fine: fine / n };
+  };
+
+  it("無地としわだけの見本を見分ける（柄・ボーダー・色のちがう柄は無地としない）", () => {
+    expect(plainCloth(wrinkled(128, 128))).toBe(true);
+    expect(plainCloth(image(128, 128, (_x, y) => (y % 12 < 6 ? 60 : 200)))).toBe(false);
+    expect(plainCloth(blotches(128, 128, 3))).toBe(false);
+  });
+
+  it("しわの濃淡は弱め、細かい織り目は残す", () => {
+    const tile = seamlessTile(wrinkled(128, 128));
+    const before = lowSpread(tile);
+    softenWrinkles(tile);
+    const after = lowSpread(tile);
+    expect(after.low).toBeLessThan(before.low * 0.55);
+    expect(after.fine).toBeGreaterThan(before.fine * 0.8);
   });
 });

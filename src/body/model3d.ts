@@ -3,7 +3,7 @@
 import * as THREE from "three";
 import type { LookShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
-import { garmentPieces, Layers, underwear, type UvMode } from "./garments";
+import { garmentPieces, Layers, underwear, type SwatchMatch, type UvMode } from "./garments";
 import { fitHuman, loadHuman, type Fitted, type Human, type V3 } from "./human";
 import { fitShoe, shoeLift, shoeMaterial, type ShoeAsset } from "./shoe";
 import type { BodyScan } from "./types";
@@ -55,6 +55,8 @@ export interface Paint {
    */
   tile?: [number, number];
   sleeveTile?: [number, number];
+  /** 生地の見本を、写真（whole）の柄に重ねるための対応（脇で写真から見本へ切り替えるところで柄がずれないように） */
+  swatchMatch?: SwatchMatch;
 }
 
 const SKIN = new THREE.MeshStandardMaterial({
@@ -80,19 +82,23 @@ export function fabric(
       : kind === "sleeve"
         ? (paint.sleeve ?? paint.swatch)
         : paint.swatch;
+  const tiled = (t: THREE.Texture) => {
+    const c = t.clone();
+    c.needsUpdate = true;
+    // そのまま敷き詰める（見本はつなぎ目なくくり返せる模様にしてある。折り返すと柄が左右対称に映る）
+    c.wrapS = c.wrapT = THREE.RepeatWrapping;
+    return c;
+  };
   let map: THREE.Texture | undefined;
   if (base) {
-    map = base.clone();
-    map.needsUpdate = true;
     if (kind === "whole") {
+      map = base.clone();
+      map.needsUpdate = true;
       map.wrapS = map.wrapT = THREE.ClampToEdgeWrapping;
-    } else {
-      // そのまま敷き詰める（見本はつなぎ目なくくり返せる模様にしてある。折り返すと柄が左右対称に映る）
-      map.wrapS = map.wrapT = THREE.RepeatWrapping;
-    }
+    } else map = tiled(base);
   }
   // 布のつやは生地の色にする（白いつやだと、黒や紺の服が白っぽくかすんで見える）
-  return new THREE.MeshPhysicalMaterial({
+  const mat = new THREE.MeshPhysicalMaterial({
     color: map ? "#ffffff" : paint.color,
     map,
     roughness: 0.92,
@@ -103,6 +109,41 @@ export function fabric(
     sheenColorMap: map ?? null,
     side: THREE.DoubleSide,
   });
+  if (kind === "whole" && map && paint.swatch) blendSwatch(mat, tiled(paint.swatch));
+  return mat;
+}
+
+/**
+ * 写真1枚の材質に、生地の見本を混ぜる。頂点の photoFade の割合で、写真から見本（座標は頂点の swatchUv）に切り替える
+ * （cutPiece の photoFade）。脇で写真が背中の見本へ継ぎ目なくつながり、写真の脇に写った袖や影も見えなくなる。
+ * この2つを持たない形では photoFade が 0 になり、写真のまま
+ */
+function blendSwatch(mat: THREE.MeshPhysicalMaterial, swatch: THREE.Texture) {
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.swatchMap = { value: swatch };
+    const vary = "varying vec2 vSwatchUv;\nvarying float vPhotoFade;\n";
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <uv_pars_vertex>",
+        `#include <uv_pars_vertex>\nattribute vec2 swatchUv;\nattribute float photoFade;\n${vary}`,
+      )
+      .replace("#include <uv_vertex>", "#include <uv_vertex>\nvSwatchUv = swatchUv;\nvPhotoFade = photoFade;");
+    const cloth = "texture2D( swatchMap, vSwatchUv )";
+    shader.fragmentShader = shader.fragmentShader
+      .replace("#include <map_pars_fragment>", `#include <map_pars_fragment>\nuniform sampler2D swatchMap;\n${vary}`)
+      .replace(
+        "#include <map_fragment>",
+        `#ifdef USE_MAP\n\tdiffuseColor *= mix( texture2D( map, vMapUv ), ${cloth}, vPhotoFade );\n#endif`,
+      )
+      .replace(
+        "#include <lights_physical_fragment>",
+        THREE.ShaderChunk.lights_physical_fragment.replace(
+          "texture2D( sheenColorMap, vSheenColorMapUv ).rgb",
+          `mix( texture2D( sheenColorMap, vSheenColorMapUv ).rgb, ${cloth}.rgb, vPhotoFade )`,
+        ),
+      );
+  };
+  mat.customProgramCacheKey = () => "blend-swatch";
 }
 
 function geometryOf(
@@ -752,6 +793,7 @@ export function buildGarment(
       bodyU: paint.bodyU,
       tile: paint.tile,
       sleeveTile: paint.sleeveTile ?? paint.tile,
+      swatchMatch: paint.swatchMatch,
     },
     layers,
   )) {

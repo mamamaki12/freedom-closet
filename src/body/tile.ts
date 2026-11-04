@@ -122,10 +122,10 @@ function transpose(img: Rgba): Rgba {
 }
 
 /**
- * 横にくり返す長さ L を選ぶ。x と x+L の画素の差（重なる幅 n-L のぶん）を、
- * 関係のない2画素の差（色のばらつき）で割ったものが小さいほど、両端がよく似ている
+ * 横にずらしたときの似ていなさ。長さ L ごとに、x と x+L の画素の差（重なる幅 n-L のぶん）を、
+ * 関係のない2画素の差（色のばらつき）で割ったもの。小さいほど、L ずらすとよく重なる
  */
-export function repeatLength(img: Rgba): number {
+function shiftErrors(img: Rgba): { err: Float32Array; best: number; lmin: number; lmax: number } {
   const { width: n, height: h, data } = img;
   const mean = [0, 0, 0];
   for (let i = 0; i < n * h; i++) for (let c = 0; c < 3; c++) mean[c] += data[i * 4 + c];
@@ -152,7 +152,17 @@ export function repeatLength(img: Rgba): number {
     err[L] = s / (o * h) / spread;
     best = Math.min(best, err[L]);
   }
-  if (best < 0.35) {
+  return { err, best, lmin, lmax };
+}
+
+/** 決まった長さでくり返す柄か（ボーダー・チェック・キルトなど。best がこれより小さい） */
+const REPEATS = 0.35;
+
+/** 横にくり返す長さ L を選ぶ（shiftErrors が小さいほど、両端がよく似ている） */
+export function repeatLength(img: Rgba): number {
+  const n = img.width;
+  const { err, best, lmin, lmax } = shiftErrors(img);
+  if (best < REPEATS) {
     // 柄がくり返している（ボーダー・チェック・無地）：よく合う長さのうち、いちばん長いもの
     for (let L = lmax; L >= lmin; L--) if (err[L] <= best + 0.06) return L;
   }
@@ -222,4 +232,82 @@ function wrapX(img: Rgba): Rgba {
 export function seamlessTile(img: Rgba): Rgba {
   const a = wrapX(img);
   return transpose(wrapX(transpose(a)));
+}
+
+/**
+ * 無地の生地の見本か：色みがほとんど変わらず、明るさのむらも小さく（しわや折り目の濃淡くらい）、
+ * 縦にも横にも決まった長さでくり返さない（ボーダー・チェック・キルトではない）
+ */
+export function plainCloth(img: Rgba): boolean {
+  const { width: w, height: h, data } = img;
+  const n = w * h;
+  let l = 0;
+  let l2 = 0;
+  let ca = 0;
+  let cb = 0;
+  let c2 = 0;
+  for (let i = 0; i < n; i++) {
+    const r = data[i * 4];
+    const g = data[i * 4 + 1];
+    const b = data[i * 4 + 2];
+    const v = 0.299 * r + 0.587 * g + 0.114 * b;
+    l += v;
+    l2 += v * v;
+    ca += r - g;
+    cb += b - g;
+    c2 += (r - g) ** 2 + (b - g) ** 2;
+  }
+  l /= n;
+  ca /= n;
+  cb /= n;
+  const lumSpread = Math.sqrt(Math.max(0, l2 / n - l * l));
+  const chroma = Math.sqrt(Math.max(0, c2 / n - ca * ca - cb * cb));
+  // しわの濃淡は明るい生地ほど大きい（光の当たり方の割合なので）
+  if (chroma > 8 || lumSpread > Math.max(14, l * 0.18)) return false;
+  return shiftErrors(img).best >= REPEATS && shiftErrors(transpose(img)).best >= REPEATS;
+}
+
+/**
+ * 生地の見本（つなぎ目なくくり返せる模様）の、しわや折り目の濃淡を弱める。無地の生地を敷き詰めると、
+ * 同じしわがくり返して柄のように見えるため。明るさを、少しぼかした濃淡（しわ・折り目の線）と、
+ * それより細かいざらつき（織り目）に分け、しわのほうを keep 倍にし、ざらつきの目立つ線もおさえる。
+ * ぼかすときは、ふちを反対側につなげる（くり返したときに継ぎ目が出ないように）
+ */
+export function softenWrinkles(tile: Rgba, keep = 0.2): void {
+  const { width: w, height: h, data } = tile;
+  const n = w * h;
+  const L = new Float32Array(n);
+  let mean = 0;
+  for (let i = 0; i < n; i++) {
+    L[i] = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+    mean += L[i];
+  }
+  mean /= n;
+  // 折り目の線は 2〜4 画素の幅なので、それより細かいざらつきだけを残す
+  const R = 1;
+  const tmp = new Float32Array(n);
+  const low = new Float32Array(n);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      let t = 0;
+      for (let d = -R; d <= R; d++) t += L[y * w + ((((x + d) % w) + w) % w)];
+      tmp[y * w + x] = t / (2 * R + 1);
+    }
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      let t = 0;
+      for (let d = -R; d <= R; d++) t += tmp[((((y + d) % h) + h) % h) * w + x];
+      low[y * w + x] = t / (2 * R + 1);
+    }
+  // 細かいざらつきのうち、ふつうより強いもの（縫い目の糸や折り目のふちの細い線）は、ふつうの強さまでにする
+  const fine = new Float32Array(n);
+  for (let i = 0; i < n; i++) fine[i] = Math.abs(L[i] - low[i]);
+  const sorted = Float32Array.from(fine).sort();
+  const cap = Math.max(2, sorted[Math.floor(n * 0.5)] * 3.5);
+  for (let i = 0; i < n; i++) {
+    const d = L[i] - low[i];
+    const target = mean + (low[i] - mean) * keep + clamp(d, -cap, cap);
+    const add = target - L[i];
+    for (let c = 0; c < 3; c++) data[i * 4 + c] = clamp(data[i * 4 + c] + add, 0, 255);
+  }
 }

@@ -14,8 +14,10 @@ import {
   type Paint,
 } from "./model3d";
 import { garmentMatte } from "./cutout";
+import { alignGrid } from "./align";
+import type { SwatchMatch } from "./garments";
 import { loadShoe } from "./shoe";
-import { patternTilt, seamlessTile } from "./tile";
+import { patternTilt, plainCloth, seamlessTile, softenWrinkles } from "./tile";
 import {
   columnSpans,
   erode,
@@ -99,6 +101,8 @@ export async function garmentTextures(
   cctx.drawImage(bmp, x0 / k, y0 / k, bw / k, bh / k, 0, 0, cut.width, cut.height);
   const wctx = whole.getContext("2d", { willReadFrequently: true })!;
   wctx.imageSmoothingQuality = "high";
+  /** 列ごとの、服が写っている上端と下端（1枚貼る用に、この間を枠の高さいっぱいに伸ばした） */
+  let spans: [Float32Array, Float32Array] | undefined;
   if (ok) {
     // 切り抜きのふちには背景が 1 画素ほどまざるので、少し内側で切る
     const edge = erode(mask!, w, h, 1);
@@ -116,6 +120,7 @@ export async function garmentTextures(
     const [rawTop, bottom] = columnSpans(mask!, w, x0, x1, y0, y1);
     // 上に着る服は、首のところ（えり・ハンガー・えりぐりから見える裏）を肩の線で切る
     const top = kind === "upper" ? shoulderTop(rawTop, plan.bodyU) : rawTop;
+    spans = [top, bottom];
     for (let dx = 0; dx < whole.width; dx++) {
       const X = Math.min(x1, x0 + Math.floor(((dx + 0.5) / whole.width) * bw));
       const span = bottom[X - x0] - top[X - x0] + 1;
@@ -175,6 +180,8 @@ export async function garmentTextures(
     const d = ctx.getImageData(0, 0, N, N);
     flattenLight(d.data, N, 18);
     const t = seamlessTile(d);
+    // 無地の生地は、見本に入ったしわや折り目を弱める（敷き詰めると同じしわがくり返して柄に見える）
+    if (plainCloth(d)) softenWrinkles(t);
     const out = canvasOf(t.width, t.height);
     const octx = out.getContext("2d")!;
     const od = octx.createImageData(t.width, t.height);
@@ -182,7 +189,12 @@ export async function garmentTextures(
     octx.putImageData(od, 0, 0);
     return {
       canvas: out,
+      tile: t,
       size: [(side * t.width) / N, (side * t.height) / N] as [number, number],
+      /** 見本を取った四角のまん中（写真の cx, cy）が、できた模様のどこか（模様の座標。上が 1） */
+      center: [N / 2 / t.width, 1 - N / 2 / t.height] as [number, number],
+      /** 柄の傾きを直した角度（写真の柄は、この角度だけ右下がりに写っている） */
+      tilt,
     };
   };
   const swatch = swatchOf(bodySq);
@@ -222,6 +234,41 @@ export async function garmentTextures(
       wctx.putImageData(wd, 0, 0);
     }
   }
+  // 見本を取ったところが、1枚貼る用の模様のどこに写っているか（列ごとに伸ばしたぶんも合わせて）。
+  // 3Dで見本を写真の柄に重ねる（脇で写真から見本へ切り替えても、柄がずれて二重に見えないように）
+  let swatchMatch: SwatchMatch | undefined;
+  if (spans && plan.body) {
+    const [top, bottom] = spans;
+    /** 列 c の、1枚貼る用に伸ばした範囲（写真の上端と長さ） */
+    const column = (c: number): [number, number] => {
+      const i = Math.min(bw - 1, Math.max(0, c));
+      const sp = bottom[i] - top[i] + 1;
+      return sp >= bh * 0.75 ? [top[i], sp] : [y0, bh];
+    };
+    const [from, len] = column(Math.floor(bodySq.cx) - x0);
+    // whole の座標 (u, v) の写真の位置は、列の上端から (1 - v) * 長さ下。見本は柄の傾きを直して取ってあるので、
+    // 写真のずれ (dx, dy) は見本の (dx cos + dy sin, dy cos - dx sin)
+    const [sw, sh] = swatch.size;
+    const cos = Math.cos(swatch.tilt);
+    const sin = Math.sin(swatch.tilt);
+    const base = (u: number, v: number): [number, number] => {
+      const f = u * bw - 0.5;
+      const c = Math.floor(f);
+      const [fa, la] = column(c);
+      const [fb, lb] = column(c + 1);
+      const t = f - c;
+      const y = fa + (fb - fa) * t + (1 - v) * (la + (lb - la) * t);
+      const dx = x0 + u * bw - bodySq.cx;
+      const dy = y - bodySq.cy;
+      return [swatch.center[0] + (dx * cos + dy * sin) / sw, swatch.center[1] - (dy * cos - dx * sin) / sh];
+    };
+    swatchMatch = {
+      at: [(bodySq.cx - x0) / bw, 1 - (bodySq.cy - from) / len],
+      tileAt: swatch.center,
+      size: [sw / bw, sh / len],
+      grid: alignGrid(wctx.getImageData(0, 0, whole.width, whole.height), swatch.tile, base, plan.bodyU),
+    };
+  }
   // 地の色：生地の見本の平均（背景は除く）
   const hex = (c: number[]) =>
     `#${c
@@ -246,6 +293,7 @@ export async function garmentTextures(
     tone,
     tile: plan.refPx > 0 ? perRef(swatch.size, plan.refPx) : undefined,
     sleeveTile: sleeve && plan.refPx > 0 ? perRef(sleeve.size, plan.refPx) : undefined,
+    swatchMatch,
   };
 }
 

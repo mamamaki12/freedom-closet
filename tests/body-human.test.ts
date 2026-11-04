@@ -5,6 +5,7 @@ import { garmentPieces } from "../src/body/garments";
 import { blendFor, fitHuman, parseHuman, type Human } from "../src/body/human";
 import { defaultScan } from "../src/body/measure";
 import type { LookShape } from "../src/domain/look";
+import type * as THREE from "three";
 
 async function load(): Promise<Human> {
   const buf = readFileSync(
@@ -97,8 +98,8 @@ describe("服の切り出し", () => {
     { kind: "top", sleeve: "short", hem: "normal" },
     { kind: "top", sleeve: "long", hem: "long" },
     { kind: "top", sleeve: "none", hem: "short" },
-    { kind: "outer", length: "short", puffy: true },
-    { kind: "outer", length: "long", puffy: false },
+    { kind: "outer", length: "short", puffy: true, sleeve: "long" },
+    { kind: "outer", length: "long", puffy: false, sleeve: "long" },
     { kind: "dress", sleeve: "long", length: "knee" },
     { kind: "skirt", length: "mini" },
     { kind: "pants", width: "wide", length: "full" },
@@ -131,6 +132,110 @@ describe("服の切り出し", () => {
         (p) => p.geometry.groups[0].count > 0,
       ).length,
     ).toBe(2);
+  }, 60000);
+
+  it("前の写真は脇に向かって生地の見本に切り替わり、背中の見本と継ぎ目なくつながる", async () => {
+    const h = await load();
+    const profile = { heightCm: 172, weightKg: 65, fit: "mens" as const };
+    const fit = fitHuman(h, defaultScan(profile), profile, { warp: false });
+    const m = fit.marks;
+    const match = { at: [0.35, 0.4] as [number, number], tileAt: [0.5, 0.5] as [number, number], size: [0.15, 0.12] as [number, number] };
+    const top = (bodyU: [number, number], sleeve: "short" | "long") =>
+      garmentPieces(h, fit, { kind: "top", sleeve, hem: "normal", neck: "crew" }, { bodyU, swatchMatch: match })[0].geometry;
+    const geo = top([0.2, 0.8], "short");
+    const pos = geo.getAttribute("position").array as Float32Array;
+    const uv = geo.getAttribute("uv").array as Float32Array;
+    const fade = geo.getAttribute("photoFade").array as Float32Array;
+    const sw = geo.getAttribute("swatchUv").array as Float32Array;
+    const idx = geo.getIndex()!.array;
+    const [front, back] = geo.groups;
+    const inGroup = (g: { start: number; count: number }) => {
+      const set = new Set<number>();
+      for (let k = g.start; k < g.start + g.count; k++) set.add(idx[k]);
+      return set;
+    };
+    const fv = inGroup(front);
+    const bv = inGroup(back);
+    // 前のまん中は写真のまま、真横は見本だけ
+    let center = 0;
+    let side = 0;
+    for (const v of fv) {
+      const x = pos[v * 3];
+      const y = pos[v * 3 + 1];
+      const a = Math.atan2(Math.abs(x), pos[v * 3 + 2] - m.torsoCz(y)) / (Math.PI / 2);
+      if (a < 0.4) {
+        expect(fade[v]).toBe(0);
+        center++;
+      }
+      if (a > 0.97) {
+        expect(fade[v]).toBeCloseTo(1, 5);
+        side++;
+      }
+    }
+    expect(center).toBeGreaterThan(50);
+    expect(side).toBeGreaterThan(20);
+    // 前と背中の境目（同じ位置の頂点）で、前の見本の座標が背中の見本の座標と同じ
+    const backUv = new Map<string, [number, number]>();
+    const key = (v: number) => `${pos[v * 3].toFixed(5)},${pos[v * 3 + 1].toFixed(5)},${pos[v * 3 + 2].toFixed(5)}`;
+    for (const v of bv) {
+      backUv.set(key(v), [uv[v * 2], uv[v * 2 + 1]]);
+      expect(fade[v]).toBe(0);
+    }
+    let shared = 0;
+    for (const v of fv) {
+      const b = backUv.get(key(v));
+      if (!b) continue;
+      shared++;
+      expect(fade[v]).toBeCloseTo(1, 5);
+      expect(sw[v * 2]).toBeCloseTo(b[0], 4);
+      expect(sw[v * 2 + 1]).toBeCloseTo(b[1], 4);
+    }
+    expect(shared).toBeGreaterThan(20);
+    // 写真が見えているところでは、見本は写真の柄に重なる：写真の座標 at のところが見本の座標 tileAt で、
+    // 見本1枚が写真の座標で size の大きさ
+    let checked = 0;
+    for (const v of fv) {
+      if (fade[v] > 0) continue;
+      checked++;
+      for (let e = 0; e < 2; e++)
+        expect(sw[v * 2 + e]).toBeCloseTo(match.tileAt[e] + (uv[v * 2 + e] - match.at[e]) / match.size[e], 4);
+    }
+    expect(checked).toBeGreaterThan(50);
+    // ハンガーにかけた写真（胴の範囲が服の幅いっぱい）の長袖は、写真の左右のはし（垂れた袖）も見本にする
+    const meanFade = (g: THREE.BufferGeometry) => {
+      const f = g.getAttribute("photoFade").array as Float32Array;
+      const vs = inGroup(g.groups[0]);
+      let t = 0;
+      for (const v of vs) t += f[v];
+      return t / vs.size;
+    };
+    expect(meanFade(top([0.02, 0.98], "long"))).toBeGreaterThan(meanFade(top([0.02, 0.98], "short")) + 0.05);
+    // 上下2枚に分かれる服は、背中の見本の当て方が上下で同じ（模様が腰でずれない）
+    const dress = garmentPieces(h, fit, { kind: "dress", sleeve: "long", length: "knee" }, { bodyU: [0.2, 0.8], swatchMatch: match })
+      .filter((p) => p.body === "whole")
+      .map((p) => p.geometry.userData.swatchPlane);
+    expect(dress.length).toBe(2);
+    expect(dress[0]).toBeDefined();
+    expect(dress[1]).toEqual(dress[0]);
+  }, 60000);
+
+  it("ベストは袖がない", async () => {
+    const h = await load();
+    const profile = { heightCm: 172, weightKg: 65, fit: "mens" as const };
+    const fit = fitHuman(h, defaultScan(profile), profile, { warp: false });
+    const m = fit.marks;
+    // 袖（材質 2）の頂点のいちばん下：ベストは袖ぐりまで、長袖は手首まで
+    const sleeveBottom = (sleeve: "none" | "long") => {
+      const geo = garmentPieces(h, fit, { kind: "outer", length: "short", puffy: true, sleeve })[0].geometry;
+      const pos = geo.getAttribute("position").array as Float32Array;
+      const idx = geo.getIndex()!.array;
+      const g = geo.groups[2];
+      let lo = Infinity;
+      for (let k = g.start; k < g.start + g.count; k++) lo = Math.min(lo, pos[idx[k] * 3 + 1]);
+      return lo;
+    };
+    expect(sleeveBottom("none")).toBeGreaterThan(m.chestY - 0.05);
+    expect(sleeveBottom("long")).toBeLessThan(m.chestY - 0.2);
   }, 60000);
 
   it("えりの形ごとに、首のまわりを囲むえりができる", async () => {

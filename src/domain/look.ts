@@ -13,7 +13,7 @@ export type Neck = "crew" | "v" | "plain" | "collar" | "stand" | "hood" | "lapel
 /** イラストで描く形。服の種類の名前（subType）から決める */
 export type LookShape =
   | { kind: "top"; sleeve: Sleeve; hem: "short" | "normal" | "long"; neck?: Neck }
-  | { kind: "outer"; length: "short" | "middle" | "long"; puffy: boolean; neck?: Neck }
+  | { kind: "outer"; length: "short" | "middle" | "long"; puffy: boolean; sleeve: "none" | "long"; neck?: Neck }
   | { kind: "pants"; width: "slim" | "regular" | "wide"; length: "short" | "full" }
   | { kind: "skirt"; length: "mini" | "knee" | "long" }
   | { kind: "dress"; sleeve: Sleeve; length: "knee" | "long"; neck?: Neck }
@@ -65,6 +65,7 @@ export function lookShape(g: Pick<GarmentInfo, "category" | "subType">): LookSha
         kind: "outer",
         length: has(s, /ロング|トレンチ|チェスター/) ? "long" : has(s, /コート/) ? "middle" : "short",
         puffy: has(s, /ダウン|中綿|ダウンジャケット/),
+        sleeve: has(s, /ベスト|ジレ/) ? "none" : "long",
         neck: neckOf("outer", s),
       };
     case "bottoms":

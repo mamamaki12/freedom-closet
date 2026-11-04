@@ -17,7 +17,9 @@ describe("lookShape", () => {
     expect(lookShape({ category: "bottoms", subType: "ショートパンツ" })).toMatchObject({ kind: "pants", length: "short" });
     expect(lookShape({ category: "bottoms", subType: "ロングスカート" })).toMatchObject({ kind: "skirt", length: "long" });
     expect(lookShape({ category: "outer", subType: "トレンチコート" })).toMatchObject({ kind: "outer", length: "long" });
-    expect(lookShape({ category: "outer", subType: "ダウン" })).toMatchObject({ kind: "outer", puffy: true, length: "short" });
+    expect(lookShape({ category: "outer", subType: "ダウン" })).toMatchObject({ kind: "outer", puffy: true, length: "short", sleeve: "long" });
+    expect(lookShape({ category: "outer", subType: "ダウンベスト" })).toMatchObject({ kind: "outer", sleeve: "none" });
+    expect(lookShape({ category: "outer", subType: "ニットジレ" })).toMatchObject({ kind: "outer", sleeve: "none" });
     expect(lookShape({ category: "shoes", subType: "ブーツ" })).toMatchObject({ kind: "shoes", style: "boots" });
   });
 

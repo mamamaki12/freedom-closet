@@ -3,12 +3,42 @@
 import * as THREE from "three";
 import type { LookShape } from "../domain/look";
 import type { Neck } from "../domain/look";
+import { gridAt, type AlignGrid } from "./align";
 import { buildCollar } from "./collar";
 import type { Aux, Fitted, Human, HumanMesh, Marks, V3 } from "./human";
 
 const clamp = (v: number, lo: number, hi: number) =>
   Math.min(hi, Math.max(lo, v));
 const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+const smooth = (t: number) => {
+  const u = clamp(t, 0, 1);
+  return u * u * (3 - 2 * u);
+};
+
+/**
+ * 生地の見本を、写真（1枚貼る模様 whole）の柄に重ねるための対応。
+ * whole の座標 at のところを見本の座標 tileAt に当て、見本1枚を whole の座標で size の大きさにする
+ */
+export interface SwatchMatch {
+  at: [number, number];
+  tileAt: [number, number];
+  size: [number, number];
+  /**
+   * whole の座標から見本の座標への対応の表（align.ts）。1枚貼る用の模様は列ごとに縦に伸ばしてあり、
+   * 見本は柄の傾きを直して取ってあり、写真の柄は少しずつ曲がっているので、それを合わせたもの。
+   * なければ at・size どおり（まっすぐ）
+   */
+  grid?: AlignGrid;
+}
+
+/** 見本を3Dにまっすぐ前から当てる当て方：位置 (x, y) が見本の座標 at、見本1枚が3Dで tx × ty */
+export interface SwatchPlane {
+  x: number;
+  y: number;
+  tx: number;
+  ty: number;
+  at: [number, number];
+}
 
 /** 面ごとの頂点法線（なめらか） */
 export function vertexNormals(
@@ -231,6 +261,25 @@ export interface CutSpec {
   drape?: (p: Float32Array) => void;
   /** 本体（group 0）の頂点の範囲を写真のどこに当てるか [u0, v0, u1, v1]。省略時は写真全体 */
   photoRect?: [number, number, number, number];
+  /**
+   * 本体（写真1枚）を、生地の見本に切り替える割合（0: 写真、1: 見本）。side は頂点ごと（辺の上に作る点は両はしの間）、
+   * band は写真の横の座標 u から決め、大きいほうを使う。
+   * 本体の頂点に、割合（photoFade）と見本の座標（swatchUv。group 1 と同じ測り方）を持たせ、材質で混ぜる。
+   * 前と背中の境目で 1 にすると、写真が背中の見本へ継ぎ目なくつながる
+   */
+  photoFade?: {
+    side: (i: number) => number;
+    band?: (u: number) => number;
+    /** 前と背中を分ける fields の番号。その境目に作る点は見本だけ（1）にする */
+    seam?: number;
+  };
+  /**
+   * 見本の座標（group 1 と、本体の swatchUv）を、写真の柄に重ねる。写真の貼り方（本体の範囲と photoRect）から、
+   * 見本を取ったところの3Dの位置と、見本1枚の3Dの大きさ（near の 0.6〜1.6 倍まで）を決めて、まっすぐ前から当てる。
+   * plane があればその当て方を使う（上下2枚に分かれる服で、背中の模様を上下でつなげる）。
+   * できた当て方は、返す geometry の userData.swatchPlane に入れる
+   */
+  swatchMatch?: SwatchMatch & { near: [number, number]; plane?: SwatchPlane };
   /** 重ね着（下に着た服より外へ出し、この服も覚える）。torso は腕でない頂点 */
   layers?: Layers;
   torso?: (i: number) => boolean;
@@ -266,9 +315,10 @@ export function cutPiece(
   // 法線は切る前のメッシュ全体から取り、継ぎ目や切り口で陰影が途切れないようにする
   const full = vertexNormals(p, mesh.index);
 
-  // 頂点ごとの値：位置3・法線3・keep・fields。辺の上に作る点（番号は n から）は両はしの値の間
+  // 頂点ごとの値：位置3・法線3・keep・fields・写真から見本への割合。辺の上に作る点（番号は n から）は両はしの値の間
   const F = spec.fields ?? [];
-  const stride = 7 + F.length;
+  const fadeAt = 7 + F.length;
+  const stride = fadeAt + 1;
   const vals: number[] = [];
   for (let i = 0; i < n; i++) {
     for (let e = 0; e < 3; e++) vals.push(p[i * 3 + e]);
@@ -276,6 +326,7 @@ export function cutPiece(
     // 切り口の位置は両はしの値の比で決めるので、値は有限にしておく
     vals.push(clamp(spec.keep(i, p), -1e3, 1e3));
     for (const f of F) vals.push(clamp(f(i), -1e3, 1e3));
+    vals.push(spec.photoFade ? clamp(spec.photoFade.side(i), 0, 1) : 0);
   }
   const from: number[] = []; // 作った点の両はし
   const ts: number[] = []; // 1つめのはしから、どれだけ進んだところか
@@ -292,6 +343,7 @@ export function cutPiece(
       v = vals.length / stride;
       for (let e = 0; e < stride; e++) vals.push(lerp(vals[a * stride + e], vals[b * stride + e], t));
       vals[v * stride + 6 + k] = 0;
+      if (k >= 1 && k - 1 === spec.photoFade?.seam) vals[v * stride + fadeAt] = 1;
       from.push(a, b);
       ts.push(t);
       made.set(key, v);
@@ -355,6 +407,40 @@ export function cutPiece(
   const w = Math.max(1e-3, maxX - minX);
   const h = Math.max(1e-3, maxY - minY);
   const [u0, v0, u1, v1] = spec.photoRect ?? [0, 0, 1, 1];
+  /** 本体の写真の座標 */
+  const photoUv = (v: number): [number, number] => [
+    u0 + ((vals[v * stride] - minX) / w) * (u1 - u0),
+    v0 + ((vals[v * stride + 1] - minY) / h) * (v1 - v0),
+  ];
+  // 見本を写真の柄に重ねる：写真の座標 at に当たる3Dの位置と、見本1枚の3Dの大きさ
+  const match = spec.swatchMatch;
+  const plane: SwatchPlane | undefined =
+    match &&
+    (match.plane ?? {
+      x: minX + ((match.at[0] - u0) / (u1 - u0)) * w,
+      y: minY + ((match.at[1] - v0) / (v1 - v0)) * h,
+      tx: clamp((match.size[0] / (u1 - u0)) * w, match.near[0] * 0.6, match.near[0] * 1.6),
+      ty: clamp((match.size[1] / (v1 - v0)) * h, match.near[1] * 0.6, match.near[1] * 1.6),
+      at: match.tileAt,
+    });
+  /**
+   * 写真の柄にぴったり重なる見本の座標（写真の座標 u, v から）。脇で写真から見本へ切り替えはじめるところでは、
+   * 見本をこれに合わせて、写真の柄と見本の柄が二重に見えないようにする
+   */
+  const alongPhoto = (u: number, v: number): [number, number] => {
+    const m = match!;
+    if (m.grid) return gridAt(m.grid, u, v);
+    return [m.tileAt[0] + (u - m.at[0]) / m.size[0], m.tileAt[1] + (v - m.at[1]) / m.size[1]];
+  };
+  /** 背中など（group 1）の見本の座標。写真に重ねるときは、まっすぐ前から当てる */
+  const planeUv = (v: number): [number, number, number] =>
+    plane
+      ? [
+          (vals[v * stride] - plane.x) / plane.tx + plane.at[0],
+          (vals[v * stride + 1] - plane.y) / plane.ty + plane.at[1],
+          0,
+        ]
+      : swatchUvAt(v, 1, 0);
 
   /** 生地の見本の座標。作った点は両はしの座標の間（縫い目をまたぐ辺は、1周ぶんずらしてから） */
   const swatchUvAt = (v: number, g: Group, ch: number): [number, number, number] => {
@@ -381,16 +467,16 @@ export function cutPiece(
   const outNrm: number[] = [];
   const uv: number[] = [];
   const src: number[] = [];
+  const fade: number[] = [];
+  const fadeUv: number[] = [];
   const index: number[][] = [[], [], []];
   for (const t of tris) {
     let corner: [number, number, number][];
     let wrap = [false, false, false];
     if (t.g === 0) {
-      corner = t.v.map((v) => [
-        u0 + ((vals[v * stride] - minX) / w) * (u1 - u0),
-        v0 + ((vals[v * stride + 1] - minY) / h) * (v1 - v0),
-        0,
-      ]);
+      corner = t.v.map((v) => [...photoUv(v), 0]);
+    } else if (t.g === 1 && plane) {
+      corner = t.v.map(planeUv);
     } else {
       corner = t.v.map((v) => swatchUvAt(v, t.g, t.c));
       const P = Math.max(corner[0][2], corner[1][2], corner[2][2]);
@@ -415,6 +501,24 @@ export function cutPiece(
         for (let e = 0; e < 6; e++) (e < 3 ? outPos : outNrm).push(vals[v * stride + e]);
         uv.push(corner[k][0], corner[k][1]);
         src.push(origin(v));
+        if (spec.photoFade) {
+          if (t.g === 0) {
+            const band = spec.photoFade.band?.(corner[k][0]) ?? 0;
+            const a = Math.max(vals[v * stride + fadeAt], clamp(band, 0, 1));
+            fade.push(a);
+            // 見本の座標：写真が見えているあいだは写真の柄に重ね（二重に見えないように）、写真がほとんど消えてから、
+            // 見本だけになるところ（前と背中の境目）で背中と同じ座標になるように移す
+            const f = planeUv(v);
+            if (match) {
+              const [pu, pv] = alongPhoto(corner[k][0], corner[k][1]);
+              const b = smooth((a - 0.75) / 0.25);
+              fadeUv.push(lerp(pu, f[0], b), lerp(pv, f[1], b));
+            } else fadeUv.push(f[0], f[1]);
+          } else {
+            fade.push(0);
+            fadeUv.push(0, 0);
+          }
+        }
       }
       index[t.g].push(o);
     }
@@ -434,10 +538,15 @@ export function cutPiece(
   geo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
   geo.setAttribute("normal", new THREE.BufferAttribute(nrm, 3));
   geo.setAttribute("uv", new THREE.BufferAttribute(new Float32Array(uv), 2));
+  if (spec.photoFade) {
+    geo.setAttribute("photoFade", new THREE.BufferAttribute(new Float32Array(fade), 1));
+    geo.setAttribute("swatchUv", new THREE.BufferAttribute(new Float32Array(fadeUv), 2));
+  }
   geo.setIndex(new THREE.BufferAttribute(all, 1));
   geo.addGroup(0, index[0].length, 0);
   geo.addGroup(index[0].length, index[1].length, 1);
   geo.addGroup(index[0].length + index[1].length, index[2].length, 2);
+  if (plane) geo.userData.swatchPlane = plane;
   return geo;
 }
 
@@ -656,6 +765,31 @@ interface Ctx {
   tile: [number, number];
   sleeveTile: [number, number];
   layers?: Layers;
+  /** 見本を写真の柄に重ねる対応（写真がなければなし） */
+  match?: SwatchMatch;
+  /**
+   * 写真の左右のはしから、袖が写っている幅（写真の横の座標で）。ハンガーにかけた写真は袖が胴の脇に垂れて写るので、
+   * そこは写真を使わず生地の見本にする
+   */
+  sleeveBand: number;
+}
+
+/**
+ * 本体（写真1枚）を脇に向かって生地の見本に切り替える割合（cutPiece の photoFade）。
+ * 体の上の位置の、胴の軸のまわりの向き（前のまん中が 0、真横が 1）で from から to にかけて写真から見本へ移り、
+ * 真横の少し手前で見本だけになる（前と背中の境目も体の上の位置で決めているので、境目ではちょうど見本だけ）。
+ * 写真の左右のはしの袖が写っているところ（はしから sleeveBand まで）も見本にする
+ */
+function sideFade(ctx: Ctx, pos: Float32Array, seam: number, from: number, to: number): CutSpec["photoFade"] {
+  const { m, sleeveBand: band } = ctx;
+  return {
+    seam,
+    side: (i) => {
+      const a = Math.atan2(Math.abs(pos[i * 3]), pos[i * 3 + 2] - m.torsoCz(pos[i * 3 + 1])) / (Math.PI / 2);
+      return smooth((a - from) / (to - from));
+    },
+    band: band > 0 ? (u) => Math.max(smooth((band - u) / 0.08), smooth((u - (1 - band)) / 0.08)) : undefined,
+  };
 }
 
 /** 胴の頂点（腕を除く）。belowY より下だけ */
@@ -883,6 +1017,8 @@ function upperPiece(
     neckline: { drop: number; open: number; back?: number; v?: boolean };
     puffy?: boolean;
     photoRect?: [number, number, number, number];
+    /** 写真から見本へ切り替える向きの範囲（sideFade） */
+    fade: [number, number];
     drape: boolean;
     swatchBody?: boolean;
   },
@@ -959,6 +1095,8 @@ function upperPiece(
         }
       : undefined,
     photoRect: opts.photoRect,
+    photoFade: sideFade(ctx, pos, 1, opts.fade[0], opts.fade[1]),
+    swatchMatch: ctx.match && { ...ctx.match, near: ctx.tile },
     layers: ctx.layers,
     torso: (i) => !isArm(i),
   };
@@ -998,6 +1136,9 @@ function skirtPiece(
     flare: number;
     swatchBody?: boolean;
     photoRect?: [number, number, number, number];
+    fade?: [number, number];
+    /** 上半分（upperPiece）の見本の当て方。背中の模様を上下でつなげる */
+    plane?: SwatchPlane;
   },
 ): Piece | undefined {
   const { human, fit, m } = ctx;
@@ -1012,6 +1153,8 @@ function skirtPiece(
     classify: ([front]) => ({ g: opts.swatchBody || !front ? 1 : 0, chart: 0 }),
     swatchUv: (i) => [pos[i * 3] / ctx.tile[0], pos[i * 3 + 1] / ctx.tile[1]],
     photoRect: opts.photoRect,
+    photoFade: opts.fade && sideFade(ctx, pos, 0, opts.fade[0], opts.fade[1]),
+    swatchMatch: opts.fade && ctx.match && { ...ctx.match, near: ctx.tile, plane: opts.plane },
     layers: ctx.layers,
   };
   const geometry = cutPiece(mesh, pos, spec);
@@ -1127,6 +1270,7 @@ export function garmentPieces(
     bodyU?: [number, number];
     tile?: [number, number];
     sleeveTile?: [number, number];
+    swatchMatch?: SwatchMatch;
   } = {},
   layers?: Layers,
 ): Piece[] {
@@ -1139,6 +1283,12 @@ export function garmentPieces(
     const tx = clamp(fx * ref, 0.03, 0.2);
     return [tx, clamp((tx * fy) / Math.max(1e-6, fx), 0.02, 0.3)];
   };
+  // 写真の横方向のうち胴に当たる範囲（袖を除いたところ）。写真がなければ全体
+  const [bu0, bu1] = photo.bodyU ?? [0, 1];
+  // ハンガーにかけた写真は袖が胴の脇に垂れて写り、胴の範囲が服の幅いっぱいに見つかる。
+  // 長袖の服でそうなっていたら、写真の左右のはし（袖が写っているところ）は生地の見本にする
+  const longSleeves =
+    shape.kind === "outer" ? shape.sleeve !== "none" : (shape.kind === "top" || shape.kind === "dress") && shape.sleeve === "long";
   const ctx: Ctx = {
     human,
     fit,
@@ -1146,11 +1296,14 @@ export function garmentPieces(
     tile: toTile(photo.tile),
     sleeveTile: toTile(photo.sleeveTile ?? photo.tile),
     layers,
+    match: photo.swatchMatch,
+    sleeveBand: longSleeves && photo.bodyU ? 0.24 * smooth((bu1 - bu0 - 0.72) / 0.14) : 0,
   };
   const sleeveLen = (s: "none" | "short" | "long") =>
     s === "none" ? 0.04 : s === "short" ? 0.3 : 0.96;
-  // 写真の横方向のうち胴に当たる範囲（袖を除いたところ）。写真がなければ全体
-  const [bu0, bu1] = photo.bodyU ?? [0, 1];
+  /** 写真から見本へ切り替える向きの範囲。上着は写真のはしに影や厚みが写りやすいので、早めに切り替える */
+  const TOP_FADE: [number, number] = [0.68, 0.95];
+  const OUTER_FADE: [number, number] = [0.6, 0.94];
   /** 上下2枚に分かれる服（コート・ワンピース）で、写真を腰の高さで上下に分ける */
   const split = (
     upperHem: number,
@@ -1179,10 +1332,13 @@ export function garmentPieces(
         neckline: NECKLINE.top[neck] ?? NECKLINE.top.default,
         drape: true,
         photoRect: [bu0, 0, bu1, 1],
+        fade: TOP_FADE,
       });
     }
     case "outer": {
       const ease = shape.puffy ? 0.032 : 0.017;
+      // ベストは袖なし（袖ぐりまで）
+      const sleeve = shape.sleeve === "none" ? sleeveLen("none") : 0.97;
       const neck = shape.neck ?? "stand";
       const neckline = NECKLINE.outer[neck] ?? NECKLINE.outer.default;
       const pieces: (Piece | undefined)[] = [];
@@ -1190,13 +1346,14 @@ export function garmentPieces(
         pieces.push(
           ...upperPiece(ctx, {
             hemY: m.crotchY - 0.01,
-            sleeve: 0.97,
+            sleeve,
             ease,
             neck,
             neckline,
             puffy: shape.puffy,
             drape: true,
             photoRect: [bu0, 0, bu1, 1],
+            fade: OUTER_FADE,
           }),
         );
       else {
@@ -1207,13 +1364,14 @@ export function garmentPieces(
         pieces.push(
           ...upperPiece(ctx, {
             hemY: upperHem,
-            sleeve: 0.97,
+            sleeve,
             ease,
             neck,
             neckline,
             puffy: shape.puffy,
             drape: true,
             photoRect: upRect,
+            fade: OUTER_FADE,
           }),
         );
         pieces.push(
@@ -1222,6 +1380,8 @@ export function garmentPieces(
             ease: ease + 0.003,
             flare: 0.05,
             photoRect: lowRect,
+            fade: OUTER_FADE,
+            plane: pieces[0]?.geometry.userData.swatchPlane,
           }),
         );
       }
@@ -1232,21 +1392,25 @@ export function garmentPieces(
       const upperHem = m.crotchY + 0.02;
       const [upRect, lowRect] = split(upperHem, hemY);
       const neck = shape.neck ?? "plain";
+      const upper = upperPiece(ctx, {
+        hemY: upperHem,
+        sleeve: sleeveLen(shape.sleeve),
+        ease: 0.008,
+        neck,
+        neckline: NECKLINE.dress[neck] ?? NECKLINE.dress.default,
+        drape: true,
+        photoRect: upRect,
+        fade: TOP_FADE,
+      });
       return [
-        ...upperPiece(ctx, {
-          hemY: upperHem,
-          sleeve: sleeveLen(shape.sleeve),
-          ease: 0.008,
-          neck,
-          neckline: NECKLINE.dress[neck] ?? NECKLINE.dress.default,
-          drape: true,
-          photoRect: upRect,
-        }),
+        ...upper,
         skirtPiece(ctx, {
           hemY,
           ease: 0.011,
           flare: 0.08,
           photoRect: lowRect,
+          fade: TOP_FADE,
+          plane: upper[0]?.geometry.userData.swatchPlane,
         }),
       ].filter((p): p is Piece => !!p);
     }
@@ -1257,7 +1421,7 @@ export function garmentPieces(
           : shape.length === "knee"
             ? m.crotchY - 0.22
             : m.crotchY - 0.4;
-      const piece = skirtPiece(ctx, { hemY, ease: 0.006, flare: 0.08 });
+      const piece = skirtPiece(ctx, { hemY, ease: 0.006, flare: 0.08, fade: TOP_FADE });
       return piece ? [piece] : [];
     }
     case "pants": {
