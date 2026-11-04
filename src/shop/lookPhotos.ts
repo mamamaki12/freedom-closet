@@ -1,5 +1,6 @@
 // 似た着こなしの写真を中継サーバー（server/photos.ts）に頼んで探す。
 // サーバーがない・写真検索が設定されていないときは null を返し、画面はイラストと検索リンクだけにする。
+import { accessCodeHeader } from "../ai/claude";
 import { lookPhotosResultSchema, type LookPhotosRequest, type LookPhotosResult } from "../ai/schemas";
 import type { Fit } from "../domain/profile";
 import type { GarmentInfo } from "../domain/types";
@@ -10,11 +11,21 @@ export class LookPhotoFinder {
   private readonly cache = new Map<string, Promise<LookPhotosResult | null>>();
   /** 一度つながらなかったら、開いている間はもう聞かない */
   private unavailable = false;
+  private accessCode = "";
 
   constructor(
     private readonly baseUrl: string = "",
     private readonly fetchImpl: Fetch = (...args) => fetch(...args),
   ) {}
+
+  /** 中継サーバーの合言葉（設定画面で入れたもの）。変わったら、断られた記録を忘れてもう一度聞く */
+  setAccessCode(code: string | undefined): void {
+    const c = code?.trim() ?? "";
+    if (c === this.accessCode) return;
+    this.accessCode = c;
+    this.unavailable = false;
+    this.cache.clear();
+  }
 
   find(items: Pick<GarmentInfo, "category" | "color" | "subType">[], fit?: Fit): Promise<LookPhotosResult | null> {
     if (this.unavailable) return Promise.resolve(null);
@@ -37,7 +48,7 @@ export class LookPhotoFinder {
     try {
       const res = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}/api/looks/photos`, {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: { "content-type": "application/json", ...accessCodeHeader(this.accessCode) },
         body: JSON.stringify(body),
       });
       // 404（サーバーなし）・503（キーなし）などは、写真なしで続ける

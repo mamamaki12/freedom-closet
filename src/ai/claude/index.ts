@@ -34,12 +34,14 @@ export class ClaudeAI implements ClosetAI {
     /** 中継サーバーのURL。空文字なら同じオリジンの /api を使う */
     private readonly baseUrl: string = "",
     private readonly fetchImpl: Fetch = (...args) => fetch(...args),
+    /** 中継サーバーの合言葉（RELAY_ACCESS_CODE を決めたときだけ）。設定画面で入れる */
+    private readonly accessCode: string = "",
   ) {}
 
   private async post<T>(path: string, body: unknown, parse: (v: unknown) => T, signal?: AbortSignal): Promise<T> {
     const res = await this.fetchImpl(`${this.baseUrl.replace(/\/$/, "")}/api/ai/${path}`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: { "content-type": "application/json", ...accessCodeHeader(this.accessCode) },
       body: JSON.stringify(body),
       signal,
     }).catch((e: unknown) => {
@@ -63,16 +65,18 @@ export class ClaudeAI implements ClosetAI {
       options?.signal,
     );
     const confidence = Math.max(0, Math.min(1, r.confidence));
+    // 服の名前は40字まで（入力欄・中継サーバー・バックアップと同じ）。長い名前が入ると、提案やバックアップの読み込みで断られるため
+    const name = (s: string) => s.trim().slice(0, 40);
     return {
       category: r.category,
-      subType: r.subType,
+      subType: name(r.subType),
       color: r.color,
       pattern: r.pattern,
       subColor: r.subColor ?? undefined,
       confidence,
       candidates: [
-        { category: r.category, subType: r.subType, score: confidence },
-        ...r.alternatives.map((a) => ({ ...a, score: (1 - confidence) / Math.max(1, r.alternatives.length) })),
+        { category: r.category, subType: name(r.subType), score: confidence },
+        ...r.alternatives.map((a) => ({ ...a, subType: name(a.subType), score: (1 - confidence) / Math.max(1, r.alternatives.length) })),
       ],
     };
   }
@@ -90,6 +94,12 @@ export class ClaudeAI implements ClosetAI {
       .map((s) => ({ ...s, matchesWith: s.matchesWith.filter((id) => ids.has(id)) }))
       .slice(0, MAX_PURCHASES);
   }
+}
+
+/** 中継サーバーに合言葉を送るヘッダー。日本語の合言葉も送れるよう、URLの形に直して入れる */
+export function accessCodeHeader(code: string | undefined): Record<string, string> {
+  const c = code?.trim();
+  return c ? { "x-access-code": encodeURIComponent(c) } : {};
 }
 
 /** 持っていない服や同じ種類の重複を含む案、使いたい服が入っていない案、もう見せた案を落とす */

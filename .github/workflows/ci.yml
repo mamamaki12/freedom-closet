@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+# 読むだけでよい（書き込みの権限は持たせない）
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest

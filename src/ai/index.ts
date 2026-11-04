@@ -9,6 +9,8 @@ export interface AISettings {
   provider: AIProviderId;
   /** Claude が失敗したとき（サーバー停止・通信エラーなど）に端末内AIで続けるか */
   fallbackToLocal: boolean;
+  /** 中継サーバーの合言葉（サーバーで RELAY_ACCESS_CODE を決めたときだけ）。この端末の中にだけ保存する */
+  accessCode?: string;
 }
 
 export const DEFAULT_AI_SETTINGS: AISettings = {
@@ -41,6 +43,6 @@ export function withFallback(primary: ClosetAI, fallback: ClosetAI, onFallback?:
 export function createAI(settings: AISettings, onFallback?: (e: unknown) => void): ClosetAI {
   const local = new LocalAI(import.meta.env.VITE_LOCAL_MODEL || undefined);
   if (settings.provider === "local") return local;
-  const claude = new ClaudeAI(import.meta.env.VITE_AI_API_BASE ?? "");
+  const claude = new ClaudeAI(import.meta.env.VITE_AI_API_BASE ?? "", undefined, settings.accessCode);
   return settings.fallbackToLocal ? withFallback(claude, local, onFallback) : claude;
 }

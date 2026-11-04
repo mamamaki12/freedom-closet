@@ -15,6 +15,7 @@ import { OutfitScreen } from "./screens/OutfitScreen";
 import { BackupPanel } from "./screens/BackupPanel";
 import { SettingsScreen } from "./screens/SettingsScreen";
 import { ShopScreen } from "./screens/ShopScreen";
+import { lookPhotoFinder } from "./shop/lookPhotos";
 import { addRecord, updateFinal } from "./storage/analysisLog";
 import * as db from "./storage/db";
 import { loadBodyScan, saveBodyScan } from "./storage/bodyScan";
@@ -61,6 +62,9 @@ export function App() {
   useEffect(() => {
     reload().catch((e) => setNotice(`保存データを読み込めませんでした（${errorMessage(e)}）`));
   }, [reload]);
+
+  // 似た着こなし写真の検索にも、中継サーバーの合言葉を使う
+  useEffect(() => lookPhotoFinder.setAccessCode(settings.accessCode), [settings.accessCode]);
 
   // 「今日はこれ」。1日1件で、同じ日にもう一度押したら上書き、null なら取り消し
   const wearToday = async (o: Outfit | null) => {
