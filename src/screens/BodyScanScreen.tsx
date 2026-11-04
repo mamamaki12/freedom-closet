@@ -124,7 +124,7 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
       {step === "done" && scan && (
         <>
           <div className="scan-result">
-            <Viewer3D scan={scan} items={[]} scale={scale} />
+            <Viewer3D scan={scan} items={[]} scale={scale} profile={profile} />
           </div>
           <p className="hint">
             {scan.views.includes("side") ? "正面と横向きの写真から作りました。" : "正面の写真から作りました（体の厚みは見積もりです）。"}

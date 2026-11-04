@@ -1,4 +1,4 @@
-import { Bot, Cloud, Smartphone } from "lucide-react";
+import { Bot, Cloud, Scale, Smartphone } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AISettings } from "../ai";
 import { ICON } from "../components/icons";
@@ -84,6 +84,50 @@ export function SettingsScreen({
       )}
       <AccuracyPanel />
       {children}
+      <Credits />
     </section>
+  );
+}
+
+/** アプリに入れている素材のライセンス表記 */
+function Credits() {
+  return (
+    <details className="more">
+      <summary>
+        <Scale {...ICON} />
+        素材のライセンス
+      </summary>
+      <ul className="hint more-body">
+        <li>
+          3Dのマネキン：
+          <a href="https://github.com/makehumancommunity/makehuman" target="_blank" rel="noreferrer">
+            MakeHuman
+          </a>
+          （CC0 1.0）
+        </li>
+        <li>
+          靴の3Dの型：「
+          <a
+            href="https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Materials Variants Shoe
+          </a>
+          」© 2021 Shopify（
+          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+            CC BY 4.0
+          </a>
+          ）。ロゴを消し、形と色を変えて使っています
+        </li>
+        <li>
+          服の切り抜きAI：
+          <a href="https://github.com/xuebinqin/U-2-Net" target="_blank" rel="noreferrer">
+            U²-Net
+          </a>
+          （U2-Netp、Apache-2.0）
+        </li>
+      </ul>
+    </details>
   );
 }

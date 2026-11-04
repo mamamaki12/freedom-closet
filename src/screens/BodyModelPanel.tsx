@@ -35,7 +35,7 @@ export function BodyModelPanel({
           : "今は身長・体重から作った標準の体型です。体の写真（正面・横向き）を撮ると、あなたの体型で作り直します。"}
       </p>
       <div className="body-preview">
-        <Viewer3D scan={body} items={[]} scale={scale} />
+        <Viewer3D scan={body} items={[]} scale={scale} profile={profile} />
       </div>
       <div className="row wrap">
         <button className="btn primary" onClick={onScan}>
