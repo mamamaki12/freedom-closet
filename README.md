@@ -66,7 +66,7 @@ src/
     claude/    Claude API版（中継サーバーを呼ぶ）
     schemas.ts アプリと中継サーバーのやりとりの形（zod）
   body/        体の写真の読み取りと 3D 表示（人体モデル human.ts、服 garments.ts、描画 render3d.ts）
-    assets/    3D の人体データ human.glb（MakeHuman から tools/body で作る）、靴の型 shoe.glb、服の切り抜きAI u2netp.onnx
+    assets/    3D の人体データ human.glb（MakeHuman から tools/body で作る）、靴の型 shoe.glb・ブーツの型 boot.glb、服の切り抜きAI u2netp.onnx
   shop/        ユニクロ・GUの検索リンク、手選びの商品リスト
   storage/     端末内の保存
   screens/     画面
@@ -80,6 +80,7 @@ docs/          設計メモ
 
 ほかに次の素材をアプリに入れている（アプリの設定画面の「素材のライセンス」にも表示する）。
 - 靴の3Dの型：Khronos glTF-Sample-Assets の [Materials Variants Shoe](https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe)（© 2021 Shopify、[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)）。元データのライセンスはロゴ・商標を含まないので、ロゴと靴底の刻印を消し、形と色を変えて使っている（`tools/body/build-shoe.mjs`）
+- ブーツの3Dの型：TunnelVisionStudio の [Photoscanned Female Ankle Boots](https://sketchfab.com/3d-models/photoscanned-female-ankle-boots-81ff219398e348b79497b0ccd98316b9)（Sketchfab、[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)）。実物のショートブーツを写真から作ったもので、ロゴはない。面の数を減らし、底・革・内張りを塗り分けて服の色で塗れるようにして使っている（`tools/body/build-boot.mjs`。元データは `tools/body/fetch-boot.sh` で取ってくる）
 - 服の切り抜きAI：[U²-Net](https://github.com/xuebinqin/U-2-Net) の小型版 U2-Netp（Apache-2.0）
 
 ## スマホで使う（GitHub Pages）

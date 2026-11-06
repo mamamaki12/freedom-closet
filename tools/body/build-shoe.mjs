@@ -19,6 +19,7 @@ import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import { glb, meshJson } from "./glb.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const src = process.argv[2] ?? path.join(here, ".cache/shoe/Models/MaterialsVariantsShoe/glTF");
@@ -170,53 +171,7 @@ for (let i = 0; i < n; i++) orm[i * 3 + 2] = 0;
 await img(orm).jpeg({ quality: 86, mozjpeg: true }).toFile(path.join(outDir, "shoe-orm.jpg"));
 
 // ---------- glb に書き出す（形だけ。模様はアプリで色を塗ってから貼る） ----------
-function glb(json, chunks) {
-  const pad = (b, v) => Buffer.concat([b, Buffer.alloc((4 - (b.length % 4)) % 4, v)]);
-  const binBuf = pad(Buffer.concat(chunks.map((c) => pad(Buffer.from(c.buffer, c.byteOffset, c.byteLength), 0))), 0);
-  let offset = 0;
-  json.bufferViews = chunks.map((c) => {
-    const v = { buffer: 0, byteOffset: offset, byteLength: c.byteLength };
-    offset += c.byteLength + ((4 - (c.byteLength % 4)) % 4);
-    return v;
-  });
-  json.buffers = [{ byteLength: binBuf.length }];
-  const jsonBuf = pad(Buffer.from(JSON.stringify(json)), 0x20);
-  const header = Buffer.alloc(12);
-  header.writeUInt32LE(0x46546c67, 0);
-  header.writeUInt32LE(2, 4);
-  header.writeUInt32LE(12 + 8 + jsonBuf.length + 8 + binBuf.length, 8);
-  const ch = (type, buf) => {
-    const h = Buffer.alloc(8);
-    h.writeUInt32LE(buf.length, 0);
-    h.writeUInt32LE(type, 4);
-    return Buffer.concat([h, buf]);
-  };
-  return Buffer.concat([header, ch(0x4e4f534a, jsonBuf), ch(0x004e4942, binBuf)]);
-}
-const bounds = (a) => {
-  const lo = [Infinity, Infinity, Infinity];
-  const hi = [-Infinity, -Infinity, -Infinity];
-  for (let i = 0; i < a.length; i += 3)
-    for (let k = 0; k < 3; k++) {
-      lo[k] = Math.min(lo[k], a[i + k]);
-      hi[k] = Math.max(hi[k], a[i + k]);
-    }
-  return { min: lo, max: hi };
-};
-const json = {
-  asset: { version: "2.0", generator: "freedom-closet build-shoe.mjs", copyright: "© 2021 Shopify, CC BY 4.0 (Materials Variants Shoe)" },
-  scene: 0,
-  scenes: [{ nodes: [0] }],
-  nodes: [{ name: "shoe", mesh: 0 }],
-  materials: [{ name: "shoe", pbrMetallicRoughness: { metallicFactor: 0 } }],
-  meshes: [{ name: "shoe", primitives: [{ attributes: { POSITION: 0, NORMAL: 1, TEXCOORD_0: 2 }, indices: 3, material: 0 }] }],
-  accessors: [
-    { bufferView: 0, componentType: 5126, count, type: "VEC3", ...bounds(pos) },
-    { bufferView: 1, componentType: 5126, count, type: "VEC3" },
-    { bufferView: 2, componentType: 5126, count, type: "VEC2" },
-    { bufferView: 3, componentType: index instanceof Uint16Array ? 5123 : 5125, count: index.length, type: "SCALAR" },
-  ],
-};
+const json = meshJson("shoe", "© 2021 Shopify, CC BY 4.0 (Materials Variants Shoe)", count, pos, index);
 const rawFile = path.join(here, ".cache/shoe-raw.glb");
 fs.writeFileSync(rawFile, glb(json, [pos, nrm, UV, index]));
 const gltfpack = path.join(here, "../../node_modules/.bin/gltfpack");
