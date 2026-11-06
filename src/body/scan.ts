@@ -105,7 +105,9 @@ async function detectAt(photo: Blob, maxSide: number, margin: number): Promise<{
     const landmarks = result.landmarks[0];
     const m = result.segmentationMasks?.[0];
     if (!landmarks || !m) throw new ScanError("写真の中に人が見つかりませんでした。明るい場所で、全身が写るように撮ってください");
-    return { mask: { width: m.width, height: m.height, data: m.getAsFloat32Array(), padding: margin }, landmarks };
+    // 人とみなす境目は 0.6：背景のある実写真（正解の切り抜きつきの街の写真927枚）では、0.5 だと
+    // 切り抜きが背景側に約1%はみ出した。採寸の式を合わせたシルエット（BodyM）ではずれがないので、条件をそろえる
+    return { mask: { width: m.width, height: m.height, data: m.getAsFloat32Array(), padding: margin, threshold: 0.6 }, landmarks };
   } finally {
     result?.segmentationMasks?.forEach((x) => x.close());
     // 読み取りに使った画像を消す

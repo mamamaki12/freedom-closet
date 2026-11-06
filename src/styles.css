@@ -905,6 +905,38 @@ legend.with-icon {
   padding-left: 1.2em;
   font-size: 0.9rem;
 }
+.body-sizes {
+  margin: 8px 0 12px;
+}
+.body-sizes h4 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+.body-sizes dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
+  gap: 6px;
+  margin: 0 0 6px;
+}
+.body-sizes dl > div {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+.body-sizes dt {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.body-sizes dd {
+  margin: 0;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.body-sizes dd small {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--muted);
+}
 
 
 /* --- 確認したい服・絞り込み・着た記録 --- */

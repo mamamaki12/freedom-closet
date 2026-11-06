@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Viewer3D } from "../body/Figure3D";
 import { defaultScan } from "../body/measure";
 import type { BodyScan } from "../body/types";
+import { BodySizes } from "../components/BodySizes";
 import { ICON } from "../components/icons";
 import { bodyShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
@@ -37,6 +38,7 @@ export function BodyModelPanel({
       <div className="body-preview">
         <Viewer3D scan={body} items={[]} scale={scale} profile={profile} />
       </div>
+      {scan && <BodySizes scan={scan} profile={profile} />}
       <div className="row wrap">
         <button className="btn primary" onClick={onScan}>
           <ScanLine {...ICON} />

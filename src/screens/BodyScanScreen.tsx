@@ -3,7 +3,9 @@ import { ArrowLeft, Check, Lock, RotateCcw, SkipForward } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Viewer3D } from "../body/Figure3D";
 import { buildScan, fitClothes, type FrontMeasure } from "../body/measure";
+import { calibrateScan } from "../body/sizes";
 import type { BodyScan } from "../body/types";
+import { BodySizes } from "../components/BodySizes";
 import { errorMessage } from "../components/common";
 import { ICON } from "../components/icons";
 import { bodyShape } from "../domain/look";
@@ -39,9 +41,9 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
       .catch(() => undefined);
   }, []);
 
-  // 服を着て撮った分をさし引く（ゆったりした服なら、そう知らせる）
+  // 写真で測った太さを身長・体重と組み合わせて直し、服を着て撮った分をさし引く（ゆったりした服なら、そう知らせる）
   function finish(raw: BodyScan) {
-    const r = fitClothes(raw, profile);
+    const r = fitClothes(calibrateScan(raw, profile), profile);
     setScan(r.scan);
     setLoose(r.loose);
     setStep("done");
@@ -131,6 +133,7 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
             {front?.armsTouching && "腕が体についていたので、胴の幅は少し不正確かもしれません。"}
             {loose && "ゆったりした服のようなので、胴や脚の太さは身長・体重からの見積もりに寄せました。下着か、体にぴったりした服で撮ると正確になります。"}
           </p>
+          <BodySizes scan={scan} profile={profile} />
           <div className="sticky-actions">
             <button className="btn" onClick={restart}>
               <RotateCcw {...ICON} />
