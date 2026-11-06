@@ -121,6 +121,25 @@ function Credits() {
           ）。ロゴを消し、形と色を変えて使っています
         </li>
         <li>
+          ブーツの3Dの型：「
+          <a
+            href="https://sketchfab.com/3d-models/photoscanned-female-ankle-boots-81ff219398e348b79497b0ccd98316b9"
+            target="_blank"
+            rel="noreferrer"
+          >
+            Photoscanned Female Ankle Boots
+          </a>
+          」
+          <a href="https://sketchfab.com/TunnelVisionStudio" target="_blank" rel="noreferrer">
+            TunnelVisionStudio
+          </a>
+          （
+          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+            CC BY 4.0
+          </a>
+          ）。面の数を減らし、色を変えて使っています
+        </li>
+        <li>
           服の切り抜きAI：
           <a href="https://github.com/xuebinqin/U-2-Net" target="_blank" rel="noreferrer">
             U²-Net

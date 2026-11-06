@@ -17,8 +17,32 @@ describe("lookShape", () => {
     expect(lookShape({ category: "bottoms", subType: "ショートパンツ" })).toMatchObject({ kind: "pants", length: "short" });
     expect(lookShape({ category: "bottoms", subType: "ロングスカート" })).toMatchObject({ kind: "skirt", length: "long" });
     expect(lookShape({ category: "outer", subType: "トレンチコート" })).toMatchObject({ kind: "outer", length: "long" });
-    expect(lookShape({ category: "outer", subType: "ダウン" })).toMatchObject({ kind: "outer", puffy: true, length: "short" });
+    expect(lookShape({ category: "outer", subType: "ダウン" })).toMatchObject({ kind: "outer", puffy: true, length: "short", sleeve: "long" });
+    expect(lookShape({ category: "outer", subType: "ダウンベスト" })).toMatchObject({ kind: "outer", sleeve: "none" });
+    expect(lookShape({ category: "outer", subType: "ニットジレ" })).toMatchObject({ kind: "outer", sleeve: "none" });
     expect(lookShape({ category: "shoes", subType: "ブーツ" })).toMatchObject({ kind: "shoes", style: "boots" });
+  });
+
+  it("服の種類の名前から、えりの形を決める", () => {
+    const neck = (category: "tops" | "outer" | "onepiece", subType: string) =>
+      (lookShape({ category, subType }) as { neck?: string }).neck;
+    expect(neck("tops", "Tシャツ")).toBe("crew");
+    expect(neck("tops", "スウェットシャツ")).toBe("crew");
+    expect(neck("tops", "ニット")).toBe("crew");
+    expect(neck("tops", "シャツ")).toBe("collar");
+    expect(neck("tops", "ポロシャツ")).toBe("collar");
+    expect(neck("tops", "パーカー")).toBe("hood");
+    expect(neck("tops", "タートルネック")).toBe("stand");
+    expect(neck("tops", "Vネックニット")).toBe("v");
+    expect(neck("tops", "ブラウス")).toBe("plain");
+    expect(neck("outer", "ダウンジャケット")).toBe("stand");
+    expect(neck("outer", "テーラードジャケット")).toBe("lapel");
+    expect(neck("outer", "デニムジャケット")).toBe("collar");
+    expect(neck("outer", "マウンテンパーカー")).toBe("hood");
+    expect(neck("outer", "カーディガン")).toBe("v");
+    expect(neck("outer", "トレンチコート")).toBe("lapel");
+    expect(neck("onepiece", "ワンピース")).toBe("plain");
+    expect(neck("onepiece", "シャツワンピース")).toBe("collar");
   });
 });
 

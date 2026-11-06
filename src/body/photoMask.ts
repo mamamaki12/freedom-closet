@@ -8,6 +8,8 @@ const NB = [
   [0, -1],
 ] as const;
 
+const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
 export interface Shot {
   width: number;
   height: number;
@@ -349,6 +351,104 @@ export function columnSpans(
     return out;
   };
   return [smooth(top), smooth(bottom)];
+}
+
+/**
+ * 肩の上の列（首のまん中 c から外へ half の 0.4〜0.66 倍）の上端を、外れ値（ハンガーの棒など）をのぞいて直線にし、
+ * 首の付け根（c から neck）での高さを出す。dir は左（-1）か右（1）
+ */
+function shoulderAt(top: Float32Array, c: number, half: number, neck: number, dir: 1 | -1): number | undefined {
+  const n = top.length;
+  const xs: number[] = [];
+  const ys: number[] = [];
+  for (let k = Math.ceil(half * 0.4); k <= Math.floor(half * 0.66); k++) {
+    const x = Math.round(c + dir * k);
+    if (x < 0 || x >= n || Number.isNaN(top[x])) continue;
+    xs.push(k);
+    ys.push(top[x]);
+  }
+  if (xs.length < 3) return undefined;
+  const sorted = [...ys].sort((p, q) => p - q);
+  const med = sorted[sorted.length >> 1];
+  const spread = Math.max(1, sorted[Math.floor(sorted.length * 0.75)] - sorted[Math.floor(sorted.length * 0.25)]);
+  let sx = 0;
+  let sy = 0;
+  let sxx = 0;
+  let sxy = 0;
+  let m = 0;
+  for (let i = 0; i < xs.length; i++) {
+    if (Math.abs(ys[i] - med) > spread * 2.5) continue;
+    sx += xs[i];
+    sy += ys[i];
+    sxx += xs[i] * xs[i];
+    sxy += xs[i] * ys[i];
+    m++;
+  }
+  if (m < 3) return med;
+  const den = m * sxx - sx * sx;
+  // 肩は外へ下がる（上端の行番号が増える）。上がっていたら水平とみなす
+  const slope = Math.max(0, den > 0 ? (m * sxy - sx * sy) / den : 0);
+  return (sy - slope * sx) / m + slope * neck;
+}
+
+/** 首の付け根は胴の幅のまん中から 3 割ほど外 */
+const NECK_HALF = 0.36;
+
+/**
+ * 首のまん中の列（服の範囲の中の列番号）。写真の服が少し傾いていたり、袖の広げ方が左右で違ったりすると、
+ * 胴の範囲のまん中は首からずれる。首のところでは上端が肩の線から外れる（えり・ハンガーのフックは上に、
+ * 平らに置いた T シャツのえりぐりは下に）ので、その外れ方の重心を首のまん中とする
+ */
+export function neckCenter(top: Float32Array, bodyU: [number, number]): number {
+  const n = top.length;
+  const half = ((bodyU[1] - bodyU[0]) / 2) * n;
+  let c = ((bodyU[0] + bodyU[1]) / 2) * n;
+  for (let pass = 0; pass < 2; pass++) {
+    const neck = half * NECK_HALF;
+    const yl = shoulderAt(top, c, half, neck, -1);
+    const yr = shoulderAt(top, c, half, neck, 1);
+    if (yl === undefined || yr === undefined) return c;
+    let sw = 0;
+    let swx = 0;
+    for (let x = Math.ceil(c - half * 0.45); x <= Math.floor(c + half * 0.45); x++) {
+      if (x < 0 || x >= n || Number.isNaN(top[x])) continue;
+      const base = yl + ((yr - yl) * (x - (c - neck))) / (2 * neck);
+      const d = Math.abs(top[x] - base);
+      sw += d;
+      swx += d * x;
+    }
+    // 首のところがはっきりしない（肩の線とほとんど同じ）ときは、胴のまん中のまま
+    if (sw < half * 0.9 * 0.02 * half) return c;
+    const next = swx / sw;
+    // 大きく外れたら信じない（胴の幅の 15% まで）
+    c = clamp(next, c - half * 0.15, c + half * 0.15);
+  }
+  return c;
+}
+
+/**
+ * 肩の線：列ごとの服の上端 top（columnSpans の、服の範囲の中の列）のうち、胴のまん中の首のところだけ、
+ * 左右の肩の線を首の付け根までのばしてまっすぐつないだ高さにする。
+ * 首のところに写るもの（ハンガーのフック・えり・えりぐりから見える後ろ身ごろの裏や名札）は、
+ * これより上にあるので模様に入らず、模様の縦の伸ばし方も肩とそろう。
+ * bodyU は胴の範囲（服の範囲の中の割合。まん中が首のまん中）
+ */
+export function shoulderTop(top: Float32Array, bodyU: [number, number]): Float32Array {
+  const n = top.length;
+  const out = new Float32Array(top);
+  const c = ((bodyU[0] + bodyU[1]) / 2) * n;
+  const half = ((bodyU[1] - bodyU[0]) / 2) * n;
+  const neck = half * NECK_HALF;
+  const yl = shoulderAt(top, c, half, neck, -1);
+  const yr = shoulderAt(top, c, half, neck, 1);
+  if (yl === undefined || yr === undefined) return out;
+  const xl = c - neck;
+  const xr = c + neck;
+  for (let x = Math.ceil(xl); x <= Math.floor(xr); x++) {
+    if (x < 0 || x >= n) continue;
+    out[x] = yl + ((yr - yl) * (x - xl)) / (xr - xl);
+  }
+  return out;
 }
 
 /**
@@ -919,7 +1019,14 @@ export function planSwatches(
   const box: Box = [x0, x1, y0, y1];
   const bw = x1 - x0 + 1;
   const bh = y1 - y0 + 1;
-  const bodyU: [number, number] = mask ? bodyRange(mask, w, x0, x1, y0, y1) : [0, 1];
+  let bodyU: [number, number] = mask ? bodyRange(mask, w, x0, x1, y0, y1) : [0, 1];
+  // 上に着る服は、胴の範囲を首のまん中にそろえる（前立てやプリントが3Dのまん中に来るように）
+  if (mask && kind === "upper" && bodyU[1] - bodyU[0] < 1) {
+    const [top] = columnSpans(mask, w, x0, x1, y0, y1);
+    const c = neckCenter(top, bodyU) / bw;
+    const half = (bodyU[1] - bodyU[0]) / 2;
+    bodyU = [clamp(c - half, 0, 1), clamp(c + half, 0, 1)];
+  }
   const tx0 = x0 + bodyU[0] * bw;
   const tx1 = x0 + bodyU[1] * bw;
   const refPx =
@@ -956,4 +1063,142 @@ export function planSwatches(
       })
     : undefined;
   return { box, bodyU, refPx, body, sleeve };
+}
+
+/**
+ * えりから胸へ垂れ下がる値札・名札など（ハンガーに掛けた売り場の写真に多い）を見つける。
+ * photo は1枚貼る用の模様、cloth は同じ大きさに生地の見本を敷き詰めたもの、seed は生地でうめるところ
+ * （えりのところ。0〜1）、region は調べる範囲（首のまわり）。
+ * 生地の見本にない色が多いところと、生地の見本より大きな同じ色のかたまり（白い線のチェックの上の、白い値札）を
+ * 「生地でないところ」とし、そのかたまりのうち seed とつながり、region の下のはしまで続かない（前立てや
+ * 前の開きではない）ものを返す。胸のプリントやロゴは seed とつながらないので残る
+ */
+export function hangingTags(photo: Shot, cloth: Shot, seed: Float32Array, region: Uint8Array): Uint8Array {
+  const { width: w, height: h } = photo;
+  const out = new Uint8Array(w * h);
+  let [x0, x1, y0, y1] = [w, -1, h, -1];
+  let area = 0;
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      if (region[y * w + x]) {
+        x0 = Math.min(x0, x);
+        x1 = Math.max(x1, x);
+        y0 = Math.min(y0, y);
+        y1 = Math.max(y1, y);
+        area++;
+      }
+  if (x1 < 0) return out;
+  // 生地の色は、敷き詰めた見本の一部（見本1枚より大きい四角）から、1 画素おきに取って調べれば足りる
+  const pw = Math.floor((Math.min(x1, x0 + 191) - x0) / 2) + 1;
+  const ph = Math.floor((Math.min(y1, y0 + 191) - y0) / 2) + 1;
+  const part = new Uint8ClampedArray(pw * ph * 4);
+  for (let y = 0; y < ph; y++)
+    for (let x = 0; x < pw; x++)
+      for (let c = 0; c < 4; c++) part[(y * pw + x) * 4 + c] = cloth.data[((y0 + y * 2) * w + x0 + x * 2) * 4 + c];
+  const pal = palette(new Uint8Array(pw * ph).fill(1), { width: pw, height: ph, data: part }, [0, pw - 1, 0, ph - 1]);
+  if (!pal) return out;
+  const K = pal.centers.length;
+  /** 生地の見本のどの色からもこれより遠い色は、生地にない色 */
+  const FAR = 48;
+  // region のまわりだけを、2×2 画素のます目ごとに調べる（値札は大きいので、それで足りる）。
+  // 色はすべての画素で数える（1 画素おきに見ると、細かいチェックがずれて見えて誤るため）
+  const ox = x0;
+  const oy = y0;
+  const cw = Math.floor((x1 - x0) / 2) + 1;
+  const ch = Math.floor((y1 - y0) / 2) + 1;
+  /** ます目 (x, y) の左上の画素 */
+  const at = (x: number, y: number) => (oy + y * 2) * w + ox + x * 2;
+  /** 色の割合を数える窓の半径（ます目で。元の画素ではおよそ 10 画素四方） */
+  const R = 2;
+  const win = (2 * R + 1) ** 2 * 4;
+  const W1 = cw + 1;
+  const plane = W1 * (ch + 1);
+  /** 色ごとの（K 番は生地にない色の）、ます目の窓の中の画素の数を求めるための累積和の表。inside の外の画素は数えない */
+  const sums = (img: Shot, inside: (i: number) => boolean) => {
+    const S = new Int32Array((K + 1) * plane);
+    const cnt = new Int32Array((K + 1) * cw);
+    const row = new Int32Array(K + 1);
+    for (let y = 0; y < ch; y++) {
+      cnt.fill(0);
+      for (let fy = oy + y * 2; fy <= Math.min(y1, oy + y * 2 + 1); fy++)
+        for (let fx = x0; fx <= x1; fx++) {
+          const i = fy * w + fx;
+          if (!inside(i)) continue;
+          const [c, d] = nearestColor(pal, img.data[i * 4], img.data[i * 4 + 1], img.data[i * 4 + 2]);
+          cnt[(d > FAR ? K : c) * cw + ((fx - ox) >> 1)]++;
+        }
+      row.fill(0);
+      for (let x = 0; x < cw; x++)
+        for (let c = 0; c <= K; c++) {
+          row[c] += cnt[c * cw + x];
+          S[c * plane + (y + 1) * W1 + x + 1] = S[c * plane + y * W1 + x + 1] + row[c];
+        }
+    }
+    return S;
+  };
+  /** 窓の中での、色 c の割合 */
+  const share = (S: Int32Array, c: number, x: number, y: number) => {
+    const a = Math.max(0, x - R);
+    const b = Math.min(cw, x + R + 1);
+    const e = Math.max(0, y - R);
+    const f = Math.min(ch, y + R + 1);
+    const base = c * plane;
+    return (S[base + f * W1 + b] - S[base + e * W1 + b] - S[base + f * W1 + a] + S[base + e * W1 + a]) / win;
+  };
+  const clothS = sums(cloth, () => true);
+  const photoS = sums(photo, (i) => region[i] === 1);
+  // 生地の見本では、どの色もこれより大きなかたまりにはならない
+  const most = new Float32Array(K + 1);
+  for (let y = 0; y < ch; y++)
+    for (let x = 0; x < cw; x++)
+      if (region[at(x, y)]) for (let c = 0; c <= K; c++) most[c] = Math.max(most[c], share(clothS, c, x, y));
+  const odd = new Uint8Array(cw * ch);
+  for (let y = 0; y < ch; y++)
+    for (let x = 0; x < cw; x++) {
+      if (!region[at(x, y)]) continue;
+      let o = share(photoS, K, x, y) > Math.max(0.45, most[K] + 0.2);
+      for (let c = 0; c < K && !o; c++) o = share(photoS, c, x, y) > most[c] + 0.2;
+      if (o) odd[y * cw + x] = 1;
+    }
+  // つながったかたまりごとに調べる
+  const keep = new Uint8Array(cw * ch);
+  const seen = new Uint8Array(cw * ch);
+  const stack: number[] = [];
+  for (let s = 0; s < cw * ch; s++) {
+    if (!odd[s] || seen[s]) continue;
+    const comp: number[] = [];
+    let touches = false;
+    let bottom = 0;
+    seen[s] = 1;
+    stack.push(s);
+    while (stack.length) {
+      const i = stack.pop()!;
+      comp.push(i);
+      const x = i % cw;
+      const y = (i - x) / cw;
+      if (seed[at(x, y)] > 0.5) touches = true;
+      bottom = Math.max(bottom, oy + y * 2);
+      for (const [dx, dy] of NB) {
+        const nx = x + dx;
+        const ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= cw || ny >= ch) continue;
+        const j = ny * cw + nx;
+        if (odd[j] && !seen[j]) {
+          seen[j] = 1;
+          stack.push(j);
+        }
+      }
+    }
+    // 1 画素おきに数えているので、面積は 4 倍
+    if (touches && bottom < y1 - 3 && comp.length * 4 < area * 0.3) for (const i of comp) keep[i] = 1;
+  }
+  // 値札のふち（写真を縮めたときのにじみ・糸）まで。元の画素で 4 画素ほど広げる
+  const grown = dilate(keep, cw, ch, 2);
+  for (let y = y0; y <= Math.min(h - 1, y1 + 1); y++)
+    for (let x = x0; x <= Math.min(w - 1, x1 + 1); x++) {
+      const gx = Math.min(cw - 1, Math.round((x - ox) / 2));
+      const gy = Math.min(ch - 1, Math.round((y - oy) / 2));
+      if (grown[gy * cw + gx]) out[y * w + x] = 1;
+    }
+  return out;
 }

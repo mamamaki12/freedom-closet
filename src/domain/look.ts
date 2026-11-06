@@ -4,16 +4,51 @@ import type { Profile } from "./profile";
 
 export type Sleeve = "none" | "short" | "long";
 
+/**
+ * えりの形（3Dで作り分ける）。crew: 丸首のリブ、v: Vネック、plain: ふちを折り返しただけ、
+ * collar: シャツのえり、stand: 立ちえり・タートルネック、hood: フード、lapel: ジャケット・コートのえり
+ */
+export type Neck = "crew" | "v" | "plain" | "collar" | "stand" | "hood" | "lapel";
+
 /** イラストで描く形。服の種類の名前（subType）から決める */
 export type LookShape =
-  | { kind: "top"; sleeve: Sleeve; hem: "short" | "normal" | "long" }
-  | { kind: "outer"; length: "short" | "middle" | "long"; puffy: boolean }
+  | { kind: "top"; sleeve: Sleeve; hem: "short" | "normal" | "long"; neck?: Neck }
+  | { kind: "outer"; length: "short" | "middle" | "long"; puffy: boolean; sleeve: "none" | "long"; neck?: Neck }
   | { kind: "pants"; width: "slim" | "regular" | "wide"; length: "short" | "full" }
   | { kind: "skirt"; length: "mini" | "knee" | "long" }
-  | { kind: "dress"; sleeve: Sleeve; length: "knee" | "long" }
+  | { kind: "dress"; sleeve: Sleeve; length: "knee" | "long"; neck?: Neck }
   | { kind: "shoes"; style: "sneakers" | "leather" | "boots" | "sandals" };
 
 const has = (s: string, re: RegExp) => re.test(s);
+
+/** 服の種類の名前から、えりの形を決める（上から順に、先に当てはまったもの） */
+function neckOf(category: "tops" | "outer" | "onepiece", s: string): Neck {
+  const rules: [RegExp, Neck][] =
+    category === "tops"
+      ? [
+          [/パーカー|フーディ|フード/, "hood"],
+          [/タートル|ハイネック|モックネック|ボトルネック/, "stand"],
+          [/Vネック|カーディガン/, "v"],
+          [/ポロ/, "collar"],
+          [/Tシャツ|ロンT|スウェット|トレーナー/, "crew"],
+          [/シャツ/, "collar"],
+          [/ブラウス|キャミ|タンク|ノースリーブ/, "plain"],
+        ]
+      : category === "outer"
+        ? [
+            [/パーカー|フード|マウンテン|ウインドブレーカー/, "hood"],
+            [/カーディガン/, "v"],
+            [/デニム|Gジャン|シャツ/, "collar"],
+            [/ダウン|中綿|ブルゾン|MA-?1|ジャンパー|スタジャン|フリース|ベスト/, "stand"],
+            [/ジャケット|コート|トレンチ|チェスター|ブレザー|テーラード/, "lapel"],
+          ]
+        : [
+            [/シャツ/, "collar"],
+            [/Vネック/, "v"],
+          ];
+  for (const [re, neck] of rules) if (re.test(s)) return neck;
+  return category === "tops" ? "crew" : category === "outer" ? "stand" : "plain";
+}
 
 export function lookShape(g: Pick<GarmentInfo, "category" | "subType">): LookShape {
   const s = g.subType;
@@ -23,12 +58,15 @@ export function lookShape(g: Pick<GarmentInfo, "category" | "subType">): LookSha
         kind: "top",
         sleeve: has(s, /ノースリーブ|タンク|キャミ/) ? "none" : has(s, /Tシャツ|ポロ|半袖/) && !has(s, /長袖|ロンT/) ? "short" : "long",
         hem: has(s, /クロップ|ショート丈/) ? "short" : has(s, /チュニック|ロング/) ? "long" : "normal",
+        neck: neckOf("tops", s),
       };
     case "outer":
       return {
         kind: "outer",
         length: has(s, /ロング|トレンチ|チェスター/) ? "long" : has(s, /コート/) ? "middle" : "short",
         puffy: has(s, /ダウン|中綿|ダウンジャケット/),
+        sleeve: has(s, /ベスト|ジレ/) ? "none" : "long",
+        neck: neckOf("outer", s),
       };
     case "bottoms":
       if (has(s, /スカート/)) return { kind: "skirt", length: has(s, /ミニ/) ? "mini" : has(s, /ロング|マキシ|フレア/) ? "long" : "knee" };
@@ -42,6 +80,7 @@ export function lookShape(g: Pick<GarmentInfo, "category" | "subType">): LookSha
         kind: "dress",
         sleeve: has(s, /ノースリーブ|キャミ/) ? "none" : has(s, /半袖|Tシャツ/) ? "short" : "long",
         length: has(s, /ロング|マキシ/) ? "long" : "knee",
+        neck: neckOf("onepiece", s),
       };
     case "shoes":
       return {

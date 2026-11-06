@@ -14,7 +14,7 @@ import {
   snapshot,
   type PhotoKind,
 } from "../../src/body/render3d";
-import { bodyShape } from "../../src/domain/look";
+import { bodyShape, type Neck } from "../../src/domain/look";
 import type { Profile } from "../../src/domain/profile";
 import type { Garment } from "../../src/domain/types";
 
@@ -168,7 +168,7 @@ async function garments(items: Item["items"] = []): Promise<Garment[]> {
 /** 服の写真から作った模様を並べて見る（背景の切り抜きの確認用）。写真の場所（フォルダー名）から服の種類を決める */
 (
   window as unknown as {
-    textures: (urls: string[], opts?: { matte?: boolean }) => Promise<string>;
+    textures: (urls: string[], opts?: { matte?: boolean; neck?: Neck }) => Promise<string>;
   }
 ).textures = async (urls, opts = {}) => {
   const sheet = document.getElementById("sheet") as HTMLCanvasElement;
@@ -185,7 +185,7 @@ async function garments(items: Item["items"] = []): Promise<Garment[]> {
         ? "shoes"
         : "upper";
     const blob = await photo(urls[i]);
-    const t = await garmentTextures(blob, "#888888", { kind, matte: opts.matte });
+    const t = await garmentTextures(blob, "#888888", { kind, matte: opts.matte, neck: opts.neck });
     const bmp = await createImageBitmap(blob);
     const k = Math.min(W / bmp.width, 170 / bmp.height);
     ctx.drawImage(bmp, i * W, 0, bmp.width * k, bmp.height * k);
@@ -206,7 +206,7 @@ async function garments(items: Item["items"] = []): Promise<Garment[]> {
       ctx.drawImage(t.sleeve.image as HTMLCanvasElement, i * W + 68, 340, 64, 64);
     ctx.fillStyle = "#333";
     ctx.font = "11px sans-serif";
-    ctx.fillText(`tile ${t.tile?.toFixed(2) ?? "-"}`, i * W + 2, 406);
+    ctx.fillText(`tile ${t.tile?.map((v) => v.toFixed(2)).join("×") ?? "-"}`, i * W + 2, 406);
   }
   return sheet.toDataURL("image/png");
 };
