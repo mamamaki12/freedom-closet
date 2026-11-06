@@ -1,6 +1,6 @@
 import type { GarmentAnalysis, Pattern } from "../../domain/types";
 import type { AnalyzeOptions, ClosetAI, OutfitInput, PurchaseInput } from "../types";
-import { classifyGarment, DEFAULT_LOCAL_MODEL, prepareClassifier, type Classified } from "./classifier";
+import { classifyGarment, DEFAULT_LOCAL_MODEL, modelSeemsDownloaded, prepareClassifier, type Classified } from "./classifier";
 import { extractPalette, readPixels, type Palette } from "./color";
 import { suggestOutfitsLocal } from "./outfits";
 import { suggestPurchasesLocal } from "./purchases";
@@ -16,6 +16,12 @@ export class LocalAI implements ClosetAI {
   /** 判定モデルの読み込みを先に始める（写真を選んでいる間にダウンロードを進めるため） */
   prepare(): void {
     prepareClassifier(this.modelId);
+  }
+
+  /** 初回だけ、モデルのダウンロードがあることを先に知らせる（モバイル回線で気づかずに使わないように） */
+  setupNote(): string | undefined {
+    if (modelSeemsDownloaded(this.modelId)) return undefined;
+    return "はじめて判定するときだけ、判定用のAI（端末によって約90〜180MB）をダウンロードします。Wi-Fiにつながっているときがおすすめです。";
   }
 
   async analyzeGarment(photo: Blob, options?: AnalyzeOptions): Promise<GarmentAnalysis> {

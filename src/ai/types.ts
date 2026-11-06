@@ -48,6 +48,8 @@ export interface ClosetAI {
 
   /** 使う前にモデルなどの読み込みを始めておく（省略可）。失敗しても何もしない */
   prepare?(): void;
+  /** 使い始める前に知らせておきたいこと（初回のダウンロードの大きさなど）。なければ undefined */
+  setupNote?(): string | undefined;
   analyzeGarment(photo: Blob, options?: AnalyzeOptions): Promise<GarmentAnalysis>;
   /** コーデ案を最大3つ。服の写真は渡さず、登録済みの情報だけで考える */
   suggestOutfits(input: OutfitInput, options?: { signal?: AbortSignal }): Promise<Outfit[]>;

@@ -82,6 +82,21 @@ export function SettingsScreen({
           <span>Claudeにつながらないときは端末内AIで続ける</span>
         </label>
       )}
+      {settings.provider === "claude" && (
+        <label className="field">
+          中継サーバーの合言葉（決めたときだけ）
+          <input
+            className="text"
+            type="password"
+            autoComplete="off"
+            spellCheck={false}
+            value={settings.accessCode ?? ""}
+            onChange={(e) => onChange({ ...settings, accessCode: e.target.value })}
+            maxLength={200}
+          />
+          <span className="hint">合言葉はこの端末の中にだけ保存し、中継サーバーに送るときだけ使います。</span>
+        </label>
+      )}
       <AccuracyPanel />
       {children}
       <Credits />

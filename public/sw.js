@@ -2,7 +2,10 @@
 // - 画面（HTML）：まず通信して、だめなら保存しておいたものを使う
 // - ビルドされたファイル（/assets/ は名前に版が入る）：保存しておいたものを先に使う
 // 判定モデルは Transformers.js が自分で保存するので、ここでは扱わない。
-const CACHE = "freedom-closet-v1";
+// GitHub Pages では、同じユーザーのほかのアプリとオリジン（<ユーザー名>.github.io）が同じで、保存場所（Cache Storage）も共通。
+// 消すのはこのアプリが作った古い保存（名前が freedom-closet- で始まるもの）だけにする。
+const PREFIX = "freedom-closet-";
+const CACHE = `${PREFIX}v1`;
 const SHELL = ["./", "./manifest.webmanifest", "./icon.svg", "./icon-192.png"];
 
 self.addEventListener("install", (event) => {
@@ -13,7 +16,7 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
+      .then((keys) => Promise.all(keys.filter((k) => k.startsWith(PREFIX) && k !== CACHE).map((k) => caches.delete(k))))
       .then(() => self.clients.claim()),
   );
 });
@@ -28,17 +31,20 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(req)
         .then((res) => {
-          const copy = res.clone();
-          caches.open(CACHE).then((c) => c.put("./", copy));
+          // 404 などのページを、通信がないときに開く画面として残さない
+          if (res.ok && res.type === "basic") {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put("./", copy));
+          }
           return res;
         })
-        .catch(() => caches.match("./")),
+        .catch(() => caches.match("./", { cacheName: CACHE })),
     );
     return;
   }
 
   event.respondWith(
-    caches.match(req).then(
+    caches.match(req, { cacheName: CACHE }).then(
       (hit) =>
         hit ||
         fetch(req).then((res) => {

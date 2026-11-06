@@ -264,6 +264,25 @@ interface Vision {
 
 let vision: Promise<Vision> | null = null;
 
+const READY_KEY = "freedom-closet:model-ready";
+
+/** 判定モデルをこの端末で一度読み込めたか（初回のダウンロードの案内を出すかに使う） */
+export function modelSeemsDownloaded(modelId: string): boolean {
+  try {
+    return typeof localStorage !== "undefined" && localStorage.getItem(READY_KEY) === modelId;
+  } catch {
+    return false;
+  }
+}
+
+function rememberModelDownloaded(modelId: string): void {
+  try {
+    if (typeof localStorage !== "undefined") localStorage.setItem(READY_KEY, modelId);
+  } catch {
+    // 覚えられなくても判定はできる（案内がもう一度出るだけ）
+  }
+}
+
 function describeError(e: unknown): Error {
   if (e instanceof TypeError) return new Error("モデルをダウンロードできませんでした。通信を確認してください");
   return new Error(`モデルを使えませんでした: ${e instanceof Error ? e.message : String(e)}`);
@@ -271,13 +290,19 @@ function describeError(e: unknown): Error {
 
 function loadVision(modelId: string): Promise<Vision> {
   vision ??= (async () => {
-    const { AutoImageProcessor, CLIPVisionModelWithProjection } = await loadTransformers();
+    // 部品と前処理の設定の読み込みも、通信できないと失敗する（英語のエラーをそのまま出さない）
+    const { AutoImageProcessor, CLIPVisionModelWithProjection } = await loadTransformers().catch((e: unknown) => {
+      throw describeError(e);
+    });
     const progress_callback = reportProgress("判定モデル");
-    const processor = await AutoImageProcessor.from_pretrained(modelId, { progress_callback });
+    const processor = await AutoImageProcessor.from_pretrained(modelId, { progress_callback }).catch((e: unknown) => {
+      throw describeError(e);
+    });
     let lastError: unknown;
     for (const opt of attempts()) {
       try {
         const model = await CLIPVisionModelWithProjection.from_pretrained(modelId, { ...opt, progress_callback });
+        rememberModelDownloaded(modelId);
         return { processor, model, device: opt.device ?? "cpu" } as unknown as Vision;
       } catch (e) {
         // WebGPU で失敗する端末があるので、次の候補でもう一度
