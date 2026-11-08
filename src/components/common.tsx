@@ -86,6 +86,14 @@ export function ColorChips({
   );
 }
 
+/** 画面に出すエラーの文。ブラウザが英語で返すよくあるもの（通信できない・容量が足りない）は、分かる言葉にする */
 export function errorMessage(e: unknown): string {
+  if ((e as { name?: unknown } | null)?.name === "QuotaExceededError") {
+    return "端末の空き容量が足りず、保存できませんでした。いらない写真やアプリを消してから、もう一度試してください";
+  }
+  // Chrome は "Failed to fetch"、Safari は "Load failed"、Firefox は "NetworkError …"
+  if (e instanceof TypeError && /failed to fetch|load failed|networkerror/i.test(e.message)) {
+    return "通信できませんでした。電波のよいところで、もう一度試してください";
+  }
   return e instanceof Error ? e.message : String(e);
 }

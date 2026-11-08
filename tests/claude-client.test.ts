@@ -75,6 +75,62 @@ describe("ClaudeAI", () => {
   });
 });
 
+describe("ClaudeAI（合言葉・名前の長さ）", () => {
+  it("合言葉を決めたら、URLの形にしてヘッダーで送る（日本語でも送れる）", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init: RequestInit) => new Response(JSON.stringify({ suggestions: [] })));
+    await new ClaudeAI("", fetchMock as unknown as typeof fetch, " ひみつ ").suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] });
+    const headers = fetchMock.mock.calls[0][1].headers as Record<string, string>;
+    expect(headers["x-access-code"]).toBe(encodeURIComponent("ひみつ"));
+    // ヘッダーに入れられる文字だけになっている
+    expect(() => new Headers(headers)).not.toThrow();
+
+    await new ClaudeAI("", fetchMock as unknown as typeof fetch).suggestPurchases({ closet, request: { avoidColors: [] }, feedback: [] });
+    expect(fetchMock.mock.calls[1][1].headers).not.toHaveProperty("x-access-code");
+  });
+
+  it("Claude が長すぎる服の名前を返しても、40字に切り詰める（中継サーバーやバックアップで断られないように）", async () => {
+    const long = "あ".repeat(80);
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            category: "tops",
+            subType: long,
+            color: "black",
+            pattern: "solid",
+            subColor: null,
+            alternatives: [{ category: "outer", subType: long }],
+            confidence: 0.9,
+          }),
+        ),
+    );
+    const ai = new ClaudeAI("", fetchMock as unknown as typeof fetch);
+    // 写真を縮める部分（ブラウザ専用）は使わない
+    const photo = { size: 1 } as Blob;
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 10, height: 10, close() {} }));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        width = 10;
+        height = 10;
+        getContext() {
+          return { drawImage() {} };
+        }
+        async convertToBlob() {
+          return new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+        }
+      },
+    );
+    try {
+      const r = await ai.analyzeGarment(photo);
+      expect(r.subType).toHaveLength(40);
+      expect(r.candidates.every((c) => c.subType.length <= 40)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("withFallback", () => {
   const make = (id: "local" | "claude", fail: boolean): ClosetAI => ({
     id,

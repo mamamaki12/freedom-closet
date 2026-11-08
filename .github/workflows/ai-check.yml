@@ -12,6 +12,10 @@ on:
       - "scripts/**"
       - ".github/workflows/ai-check.yml"
 
+# 読むだけでよい（PR のコードを動かすので、書き込みの権限は持たせない）
+permissions:
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest

@@ -68,8 +68,8 @@ export const purchasesRequestSchema = z.object({
 });
 
 export const analyzeRequestSchema = z.object({
-  /** base64（data: の接頭辞なし） */
-  imageBase64: z.string().min(1).max(8_000_000),
+  /** base64（data: の接頭辞なし）。アプリは長辺768pxのJPEGに縮めて送るので、ふつうは40万字もない */
+  imageBase64: z.string().min(1).max(3_000_000),
   mediaType: z.enum(["image/jpeg", "image/png", "image/webp", "image/gif"]),
 });
 
@@ -117,6 +117,9 @@ export type OutfitsResult = z.infer<typeof outfitsResultSchema>;
 export type PurchasesResult = z.infer<typeof purchasesResultSchema>;
 
 // ---- 似た着こなしの写真（写真サイトの検索。Claudeは使わない）----
+/** 画面のリンクと画像に使うURL。https だけを受け付ける（javascript: などを入れさせない） */
+const httpsUrl = z.url({ protocol: /^https$/ });
+
 export const lookPhotosRequestSchema = z.object({
   items: z
     .array(z.object({ category: categorySchema, color: colorSchema, subType: z.string().max(40) }))
@@ -128,18 +131,18 @@ export const lookPhotosRequestSchema = z.object({
 export const lookPhotoSchema = z.object({
   id: z.string(),
   /** 一覧に出す縦長の小さい画像 */
-  image: z.string().url(),
+  image: httpsUrl,
   alt: z.string(),
   /** 写真サイトの、その写真のページ */
-  pageUrl: z.string().url(),
+  pageUrl: httpsUrl,
   photographer: z.string(),
-  photographerUrl: z.string().url(),
+  photographerUrl: httpsUrl,
 });
 
 export const lookPhotosResultSchema = z.object({
   query: z.string(),
   photos: z.array(lookPhotoSchema),
-  source: z.object({ name: z.string(), url: z.string().url() }),
+  source: z.object({ name: z.string(), url: httpsUrl }),
 });
 
 export type LookPhotosRequest = z.infer<typeof lookPhotosRequestSchema>;

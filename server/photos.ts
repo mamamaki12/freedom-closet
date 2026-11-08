@@ -2,7 +2,7 @@
 // APIキーはサーバーにだけ置く（PEXELS_API_KEY）。写真はPexelsのURLのまま表示し、アプリには保存しない。
 // 利用規約：https://www.pexels.com/api/documentation/ （出典のPexelsと撮影者を表示する）
 import { lookQuery } from "../src/domain/look";
-import type { LookPhoto, LookPhotosRequest, LookPhotosResult } from "../src/ai/schemas";
+import { lookPhotoSchema, type LookPhoto, type LookPhotosRequest, type LookPhotosResult } from "../src/ai/schemas";
 
 export class PhotosNotConfiguredError extends Error {}
 export class PhotosUpstreamError extends Error {}
@@ -17,6 +17,8 @@ interface PexelsPhoto {
 }
 
 const CACHE_MS = 24 * 60 * 60 * 1000;
+/** Pexels が返事をしないときに待つ時間 */
+const TIMEOUT_MS = 10_000;
 const CACHE_MAX = 300;
 const cache = new Map<string, { at: number; photos: LookPhoto[] }>();
 
@@ -38,17 +40,27 @@ export async function searchLookPhotos(
   url.searchParams.set("query", query);
   url.searchParams.set("orientation", "portrait");
   url.searchParams.set("per_page", "6");
-  const res = await fetchImpl(url, { headers: { authorization: apiKey } });
-  if (!res.ok) throw new PhotosUpstreamError(`Pexels ${res.status}`);
-  const body = (await res.json()) as { photos?: PexelsPhoto[] };
-  const photos: LookPhoto[] = (body.photos ?? []).map((p) => ({
-    id: String(p.id),
-    image: p.src.medium,
-    alt: p.alt || query,
-    pageUrl: p.url,
-    photographer: p.photographer,
-    photographerUrl: p.photographer_url,
-  }));
+  let body: { photos?: PexelsPhoto[] };
+  try {
+    const res = await fetchImpl(url, { headers: { authorization: apiKey }, signal: AbortSignal.timeout(TIMEOUT_MS) });
+    if (!res.ok) throw new PhotosUpstreamError(`Pexels ${res.status}`);
+    body = (await res.json()) as { photos?: PexelsPhoto[] };
+  } catch (e) {
+    if (e instanceof PhotosUpstreamError) throw e;
+    throw new PhotosUpstreamError(`Pexels: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  // 画面のリンクと画像に使うので、形の合わないもの（https でないURLなど）は落とす
+  const photos: LookPhoto[] = (body.photos ?? []).flatMap((p) => {
+    const parsed = lookPhotoSchema.safeParse({
+      id: String(p.id),
+      image: p.src?.medium,
+      alt: p.alt || query,
+      pageUrl: p.url,
+      photographer: p.photographer,
+      photographerUrl: p.photographer_url,
+    });
+    return parsed.success ? [parsed.data] : [];
+  });
 
   if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value!);
   cache.set(query, { at: Date.now(), photos });
