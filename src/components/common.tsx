@@ -55,6 +55,18 @@ export function GarmentThumb({
   );
 }
 
+/** 小さな写真と名前だけの1行（押せない）。たくさん並べても場所を取らない */
+export function GarmentChip({ garment }: { garment: Garment }) {
+  const url = usePhotoUrl(garment.photo);
+  const label = shortLabel(garment);
+  return (
+    <li className="garment-chip">
+      {url ? <img src={url} alt="" /> : <span className="garment-chip-img" style={{ background: COLORS[garment.color].hex }} aria-hidden />}
+      {label}
+    </li>
+  );
+}
+
 export function ColorDot({ color }: { color: ColorName }) {
   return <span className="color-dot" style={{ background: COLORS[color].hex }} aria-hidden />;
 }
