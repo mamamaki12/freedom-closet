@@ -647,10 +647,11 @@ ul.more-body li + li {
 .thumb.pending .thumb-label {
   color: var(--muted-strong);
 }
+/* 枠の中にもう1つ枠を作らず、上下の線だけで区切る（チップを並べる幅を広く取る） */
 .choose {
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  padding: 12px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  padding: 12px 0;
   margin: 12px 0;
 }
 .choose p {
@@ -675,6 +676,63 @@ ul.more-body li + li {
 }
 .choose-actions .btn {
   min-height: 44px;
+}
+
+/* 種類を聞く画面：写真と短い問いかけを1行に。理由は「くわしく」を開いて読む。種類はカテゴリーの小さな見出しで区切る */
+.choose-head {
+  align-items: center;
+}
+.choose-head .choose-photo {
+  width: 72px;
+  height: 72px;
+}
+.choose-title {
+  font-weight: 600;
+}
+.choose-head .hint {
+  margin: 0;
+}
+.choose-why {
+  border-top: 0;
+  margin: 0;
+  padding: 0;
+}
+.choose-why summary {
+  padding: 0 8px;
+  font-size: 0.85rem;
+  color: var(--muted-strong);
+}
+.choose-why[open] {
+  /* 開いたら、ボタンの行の下に1行使って理由を出す */
+  flex-basis: 100%;
+}
+.choose-why[open] > summary {
+  margin-bottom: 0;
+}
+.choose-why .hint {
+  margin: 0;
+  font-size: 0.8rem;
+}
+.choose-groups {
+  display: grid;
+  /* 横に広い画面では2列にして、スクロールを減らす */
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  column-gap: 16px;
+}
+.choose-heading {
+  margin: 8px 0 4px;
+  font-size: 0.75rem;
+  line-height: 1.3;
+  font-weight: 600;
+  color: var(--muted-strong);
+  letter-spacing: 0.04em;
+}
+.choose-group .chips {
+  margin-bottom: 0;
+}
+.choose-group .chip {
+  font-size: 0.8rem;
+  padding: 4px 9px;
 }
 
 .size-row {
@@ -1370,5 +1428,43 @@ legend.with-icon {
   .fab {
     width: 56px;
     padding: 0;
+  }
+}
+
+/* --- 横向きの低い画面（スマホを横にしたとき）：下のタブを左の縦の列に移し、保存のバーも低くする --- */
+@media (orientation: landscape) and (max-height: 500px) {
+  body {
+    /* 左の列（幅 80px）のぶん、中身を右へずらす */
+    padding-left: calc(80px + env(safe-area-inset-left));
+  }
+  .app {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .tabs {
+    top: 0;
+    right: auto;
+    width: calc(80px + env(safe-area-inset-left));
+    flex-direction: column;
+    justify-content: center;
+    /* タブどうしは 8px あける */
+    gap: 8px;
+    border-top: 0;
+    border-right: 1px solid var(--line);
+    padding: env(safe-area-inset-top) 0 env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  .tabs button {
+    flex: none;
+    max-width: none;
+    /* 押せる範囲は 44px 以上（アイコン＋文字で 約 56px） */
+    min-height: 56px;
+    padding: 6px 2px;
+  }
+  .sticky-actions {
+    bottom: env(safe-area-inset-bottom);
+    padding: 6px 16px;
+  }
+  .fab {
+    right: max(16px, calc((100vw - 80px - 720px) / 2 + 16px));
+    bottom: calc(16px + env(safe-area-inset-bottom));
   }
 }
