@@ -1,6 +1,6 @@
 // 服の登録。写真を選ぶだけで、AIが種類と色を判定してそのまま登録する。
 // 直したいときは、あとからタップして直す。種類が分からなかった写真だけ、1回タップで選んでもらう。
-import { ArrowLeft, Ban, Camera, Check, Images, RotateCcw, X } from "lucide-react";
+import { ArrowLeft, Ban, Camera, Check, Images, Info, RotateCcw, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
@@ -264,49 +264,59 @@ function ChooseType({
   const failed = item.state === "failed";
   // 判定できなかったとき・モデルを読み込めなかったときは、もう一度試すと直ることがある（服ではないと判定されたときは同じ答えになる）
   const canRetry = failed || (item.analysis?.candidates.length === 0 && !!item.analysis.warning);
+  // 理由（モデルを読み込めなかった など）は長くなるので、短い1行だけ見せて、くわしくは開いて読む
+  const why = failed ? item.error && `理由：${item.error}` : item.analysis?.warning;
   return (
     <div className="choose">
-      <div className="row">
+      <div className="row choose-head">
         {url && <img className="choose-photo" src={url} alt="種類が分からなかった服" />}
         <div className="grow">
-          <p>
-            {failed
-              ? item.analysis
-                ? "保存できませんでした。"
-                : "うまく判定できませんでした。"
-              : (item.analysis?.warning ?? "種類だけ分かりませんでした。")}
+          <p className="choose-title">
+            {failed ? (item.analysis ? "保存できませんでした。" : "判定できませんでした。") : "種類が分かりませんでした。"}
             どれですか？
-            {rest > 0 && <span className="hint">（このあと{rest}枚）</span>}
           </p>
-          {failed && item.error && (
-            <p className="hint">
-              理由：{item.error}
-              {!item.analysis && "　色も分からなかったので、登録したあとで直してください。"}
-            </p>
-          )}
-          <div className="choose-actions">
-            {canRetry && (
-              <button className="btn ghost small" onClick={onRetry} title="もう一度判定する">
-                <RotateCcw {...ICON} />
-                <BtnText text="もう一度判定する" short="再判定" />
-              </button>
-            )}
-            <button className="btn ghost small" onClick={onRemove} title="服ではない・やめる">
-              <Ban {...ICON} />
-              <BtnText text="服ではない・やめる" short="やめる" />
-            </button>
-          </div>
+          {rest > 0 && <p className="hint">このあと{rest}枚</p>}
+          {failed && !item.analysis && <p className="hint">色はあとで直してください。</p>}
         </div>
       </div>
-      {CATEGORIES.map((c) => (
-        <div key={c} className="chips">
-          {PRESETS.filter((p) => p.category === c).map((p) => (
-            <button key={p.subType} type="button" className="chip" onClick={() => onChoose(p)}>
-              {p.subType}
-            </button>
-          ))}
-        </div>
-      ))}
+      <div className="choose-actions">
+        {canRetry && (
+          <button className="btn ghost small" onClick={onRetry} title="もう一度判定する">
+            <RotateCcw {...ICON} />
+            <BtnText text="もう一度判定する" short="再判定" />
+          </button>
+        )}
+        <button className="btn ghost small" onClick={onRemove} title="服ではない・やめる">
+          <Ban {...ICON} />
+          <BtnText text="服ではない・やめる" short="やめる" />
+        </button>
+        {why && (
+          <details className="more choose-why">
+            <summary>
+              <Info {...ICON} />
+              くわしく
+            </summary>
+            <p className="hint">{why}</p>
+          </details>
+        )}
+      </div>
+      {/* 種類はカテゴリーごとに小さな見出しを付け、チップは折り返して並べる */}
+      <div className="choose-groups">
+        {CATEGORIES.map((c) => (
+          <div key={c} className="choose-group" role="group" aria-labelledby={`choose-${item.key}-${c}`}>
+            <h3 id={`choose-${item.key}-${c}`} className="choose-heading">
+              {CATEGORY_LABELS[c]}
+            </h3>
+            <div className="chips">
+              {PRESETS.filter((p) => p.category === c).map((p) => (
+                <button key={p.subType} type="button" className="chip" onClick={() => onChoose(p)}>
+                  {p.subType}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
