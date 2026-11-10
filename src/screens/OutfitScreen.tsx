@@ -1,6 +1,6 @@
 // コーデを3案。画面を開いたらすぐ出し、条件はタップで変えるだけ（変えたら出し直す）。
-import { CalendarCheck, Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, Undo2, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { CalendarCheck, Check, ChevronDown, ChevronRight, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, Undo2, X } from "lucide-react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, GarmentThumb } from "../components/common";
 import type { BodyScan } from "../body/types";
@@ -49,6 +49,9 @@ export function OutfitScreen({
   const [purpose, setPurpose] = useState<Purpose>(initial.purpose);
   const [mustInclude, setMustInclude] = useState<string[]>(initialMustInclude);
   const [picking, setPicking] = useState(false);
+  /** 条件は1行にたたんでおき、タップで開く（最初の案を画面の上のほうに出すため） */
+  const [condOpen, setCondOpen] = useState(false);
+  const condId = useId();
   const [preferenceInput, setPreferenceInput] = useState("");
   const [preference, setPreference] = useState("");
   /** 「ほかの案」で何回めか。条件を変えたら0に戻す */
@@ -122,6 +125,14 @@ export function OutfitScreen({
   const toggle = (id: string) =>
     change(() => setMustInclude((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(-3))));
 
+  // たたんだ行に出す今の条件（例：肌寒い・普段・おまかせ）
+  const condSummary = [
+    FEELS.find((f) => f.id === feel)?.label,
+    PURPOSE_LABELS[purpose].split("・")[0],
+    validMustInclude.length ? `服${validMustInclude.length}着` : "おまかせ",
+    ...(preference ? ["こだわりあり"] : []),
+  ].join("・");
+
   if (!ready) {
     return (
       <section className="panel">
@@ -141,7 +152,23 @@ export function OutfitScreen({
     <section className="panel">
       <h2>今日のコーデ</h2>
 
-      <div className="conditions">
+      <button
+        type="button"
+        className="cond-summary"
+        aria-expanded={condOpen}
+        aria-controls={condId}
+        title="条件を変える"
+        onClick={() => setCondOpen((v) => !v)}
+      >
+        <SlidersHorizontal {...ICON} />
+        <span className="cond-summary-text">
+          <span className="cond-summary-label">今：</span>
+          {condSummary}
+        </span>
+        {condOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
+      </button>
+
+      <div className="conditions" id={condId} hidden={!condOpen}>
         <div className="chips scroll" role="group" aria-label="体感の気温">
           {FEELS.map((f) => (
             <button key={f.id} type="button" className={`chip${feel === f.id ? " on" : ""}`} aria-pressed={feel === f.id} onClick={() => chooseFeel(f.id)}>
@@ -234,7 +261,7 @@ export function OutfitScreen({
       )}
 
       {error && <p className="error">{error}</p>}
-      {loading && !outfits && <p className="hint">考え中…</p>}
+      {loading && !outfits && <OutfitSkeletons />}
 
       <div className={loading ? "results loading" : "results"} aria-busy={loading}>
         {outfits && outfits.length === 0 && (
@@ -313,5 +340,35 @@ export function OutfitScreen({
         </button>
       )}
     </section>
+  );
+}
+
+/** 案を考えている間に出す、コーデのカードの形をした仮の枠（文字は読み上げ用だけ） */
+function OutfitSkeletons() {
+  return (
+    <div className="skeletons" role="status">
+      <span className="sr-only">考え中…</span>
+      {[0, 1].map((i) => (
+        <div key={i} className="skeleton-card" aria-hidden="true">
+          <div className="sk sk-title" />
+          <div className="look-row">
+            <div className="sk sk-figure" />
+            <div className="sk-items">
+              <div className="sk sk-thumb" />
+              <div className="sk sk-thumb" />
+              <div className="sk sk-thumb" />
+            </div>
+          </div>
+          <div className="sk sk-line" />
+          <div className="sk sk-line short" />
+          <div className="sk-actions">
+            <div className="sk sk-btn" />
+            <span className="grow" />
+            <div className="sk sk-icon" />
+            <div className="sk sk-icon" />
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
