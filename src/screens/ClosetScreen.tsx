@@ -1,5 +1,6 @@
 // クローゼット。種類ごとに並べる。上の絞り込みで「確認したい服」「しばらく着ていない服」だけも見られる。
 // スマホの最初の画面で服が見えるよう、お知らせは1行にたたみ、説明文は一度見たら出さない。
+// 「服を追加」は右下に固定した丸いボタン（スクロールしてもいつでも押せる）。
 import { Archive, Bell, ChevronDown, ChevronRight, Clock, Download, Eye, HelpCircle, Plus, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { GarmentThumb } from "../components/common";
@@ -91,14 +92,8 @@ export function ClosetScreen({
   };
 
   return (
-    <section className="panel">
-      <div className="row between panel-head">
-        <h2>クローゼット</h2>
-        <button className="btn primary" onClick={() => onAdd()} title="服を追加">
-          <Plus {...ICON} />
-          <BtnText text="服を追加" />
-        </button>
-      </div>
+    <section className="panel has-fab">
+      <h2>クローゼット</h2>
 
       {showNotices && (
         <div className="closet-notice" role="status">
@@ -222,6 +217,12 @@ export function ClosetScreen({
           </div>
         </>
       )}
+
+      {/* 服を追加：どこまでスクロールしても押せるよう、下のタブのすぐ上の右に固定する */}
+      <button type="button" className="btn primary fab" onClick={() => onAdd()} title="服を追加">
+        <Plus size={24} strokeWidth={2.2} aria-hidden />
+        <BtnText text="服を追加" />
+      </button>
     </section>
   );
 }
