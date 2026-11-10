@@ -92,7 +92,7 @@ export function ClosetScreen({
 
   return (
     <section className="panel">
-      <div className="row between">
+      <div className="row between panel-head">
         <h2>クローゼット</h2>
         <button className="btn primary" onClick={() => onAdd()}>
           <Plus {...ICON} />
