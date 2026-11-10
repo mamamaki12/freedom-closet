@@ -251,8 +251,9 @@ select.text {
   background: none;
   border: 0;
   padding: 4px;
-  min-width: 36px;
-  min-height: 36px;
+  /* 押せる範囲は 44px 以上 */
+  min-width: 44px;
+  min-height: 44px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1152,4 +1153,38 @@ legend.with-icon {
 }
 .weather a {
   color: inherit;
+}
+
+/* --- スマホではボタンをアイコン（＋短い文字）にする（BtnText） --- */
+.btn-short {
+  display: none;
+}
+@media (max-width: 640px), (pointer: coarse) {
+  /* 見えないが読み上げられる形で隠す */
+  .btn-text {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .btn-short {
+    display: inline;
+  }
+  /* アイコンだけになる小さいボタンも、押せる範囲は 44px 以上にする */
+  .btn.small {
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+  /* 文字が減るぶん、アイコンを少し大きくして見やすくする */
+  .btn svg[width="18"],
+  .picker svg[width="20"] {
+    width: 20px;
+    height: 20px;
+  }
 }

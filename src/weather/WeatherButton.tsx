@@ -1,6 +1,6 @@
 import { MapPin } from "lucide-react";
 import { useState } from "react";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { errorMessage } from "../components/common";
 import { currentPosition, fetchWeather, outingTemperature, type Weather } from "./openMeteo";
 
@@ -26,9 +26,9 @@ export function WeatherButton({ onTemperature }: { onTemperature: (c: number) =>
 
   return (
     <div className="weather">
-      <button type="button" className="btn small" onClick={load} disabled={loading}>
+      <button type="button" className="btn small" onClick={load} disabled={loading} title="現在地の気温から選ぶ">
         <MapPin {...ICON} />
-        {loading ? "取得中…" : "現在地の気温から選ぶ"}
+        {loading ? "取得中…" : <BtnText text="現在地の気温から選ぶ" short="現在地" />}
       </button>
       {weather && (
         <span className="hint">

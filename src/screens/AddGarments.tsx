@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, usePhotoUrl } from "../components/common";
 import { shortLabel } from "../domain/colors";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { applyPreset, PRESETS, presetFor, type Preset } from "../domain/presets";
 import { sizeGroup, type Profile } from "../domain/profile";
 import { CATEGORIES, CATEGORY_LABELS, REVIEW_THRESHOLD, type Garment, type GarmentAnalysis } from "../domain/types";
@@ -162,9 +162,9 @@ export function AddGarments({
       <div className="row between">
         <h2>服を追加</h2>
         {items.length > 0 && (
-          <button className={busy ? "btn" : "btn primary"} onClick={() => onDone(saved)}>
+          <button className={busy ? "btn" : "btn primary"} onClick={() => onDone(saved)} title={busy ? "ここでやめる" : "完了"}>
             {busy ? <X {...ICON} /> : <Check {...ICON} />}
-            {busy ? "ここでやめる" : "完了"}
+            {busy ? <BtnText text="ここでやめる" short="やめる" /> : <BtnText text="完了" />}
           </button>
         )}
       </div>
@@ -175,9 +175,9 @@ export function AddGarments({
           <p className="hint">写真を選ぶだけで、種類と色を判定して登録します。無地の壁や床の上に1着ずつ置いて撮ると当たりやすくなります。</p>
           {ai.setupNote?.() && <p className="hint">{ai.setupNote()}</p>}
           <div className="actions">
-            <button className="btn ghost" onClick={() => onDone(0)}>
+            <button className="btn ghost" onClick={() => onDone(0)} title="もどる">
               <ArrowLeft {...ICON} />
-              もどる
+              <BtnText text="もどる" />
             </button>
           </div>
         </>
@@ -286,14 +286,14 @@ function ChooseType({
           )}
           <div className="choose-actions">
             {canRetry && (
-              <button className="btn ghost small" onClick={onRetry}>
+              <button className="btn ghost small" onClick={onRetry} title="もう一度判定する">
                 <RotateCcw {...ICON} />
-                もう一度判定する
+                <BtnText text="もう一度判定する" short="再判定" />
               </button>
             )}
-            <button className="btn ghost small" onClick={onRemove}>
+            <button className="btn ghost small" onClick={onRemove} title="服ではない・やめる">
               <Ban {...ICON} />
-              服ではない・やめる
+              <BtnText text="服ではない・やめる" short="やめる" />
             </button>
           </div>
         </div>
@@ -325,14 +325,14 @@ export function PhotoPickers({ onPick, compact }: { onPick: (files: File[]) => v
   };
   return (
     <div className={compact ? "pickers compact" : "pickers stacked"}>
-      <label className="picker camera">
+      <label className="picker camera" title={compact ? "続けて撮る" : "カメラで撮る"}>
         <Camera className="picker-icon" size={compact ? 20 : 48} strokeWidth={1.6} aria-hidden />
-        {compact ? "続けて撮る" : "カメラで撮る"}
+        <BtnText text={compact ? "続けて撮る" : "カメラで撮る"} short="撮る" />
         <input type="file" accept="image/*" capture="environment" hidden onChange={pick} />
       </label>
-      <label className="picker album">
+      <label className="picker album" title={compact ? "アルバムから追加" : "アルバムから選ぶ"}>
         <Images className="picker-icon" size={20} strokeWidth={1.8} aria-hidden />
-        {compact ? "アルバムから追加" : "アルバムから選ぶ"}
+        <BtnText text={compact ? "アルバムから追加" : "アルバムから選ぶ"} short="アルバム" />
         {!compact && <small>まとめて選べます</small>}
         <input type="file" accept="image/*" multiple hidden onChange={pick} />
       </label>

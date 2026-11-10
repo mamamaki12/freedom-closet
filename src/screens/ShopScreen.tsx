@@ -3,7 +3,7 @@ import { Check, Ruler, Search, ShoppingBag, SlidersHorizontal } from "lucide-rea
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { ColorChips, ColorDot, errorMessage, GarmentThumb } from "../components/common";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { colorLabel } from "../domain/colors";
 import { recommendSize, type Profile } from "../domain/profile";
 import { CATEGORY_LABELS, toInfo, type ColorName, type Feedback, type Garment, type PurchaseSuggestion } from "../domain/types";
@@ -102,9 +102,9 @@ export function ShopScreen({
                 onChange={(e) => setBudgetInput(e.target.value)}
               />
             </label>
-            <button className="btn" type="submit">
+            <button className="btn" type="submit" title="反映">
               <Check {...ICON} />
-              反映
+              <BtnText text="反映" />
             </button>
           </form>
         </div>
@@ -163,9 +163,9 @@ export function ShopScreen({
                 </a>
               ))}
               {searchLinks(s.searchQuery).map((l) => (
-                <a key={l.store} className="btn" href={l.url} target="_blank" rel="noopener noreferrer">
+                <a key={l.store} className="btn" href={l.url} target="_blank" rel="noopener noreferrer" title={l.label}>
                   <Search {...ICON} />
-                  {l.label}
+                  <BtnText text={l.label} short={l.store === "UNIQLO" ? "ユニクロ" : "GU"} />
                 </a>
               ))}
             </div>

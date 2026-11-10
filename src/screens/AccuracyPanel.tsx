@@ -1,6 +1,8 @@
 // 検証用：自動判定がどれくらい合っていたかを見る
+import { Download, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../components/common";
+import { BtnText, ICON } from "../components/icons";
 import { clearRecords, listRecords, summarize, toCsv, type AnalysisRecord } from "../storage/analysisLog";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
@@ -65,8 +67,9 @@ export function AccuracyPanel() {
         </table>
       )}
       <div className="actions" style={{ justifyContent: "flex-start" }}>
-        <button className="btn" onClick={download} disabled={!records?.length}>
-          CSVで書き出す
+        <button className="btn" onClick={download} disabled={!records?.length} title="CSVで書き出す">
+          <Download {...ICON} />
+          <BtnText text="CSVで書き出す" short="CSV" />
         </button>
         <button
           className="btn danger"
@@ -78,7 +81,9 @@ export function AccuracyPanel() {
             setConfirmClear(false);
           }}
         >
-          {confirmClear ? "もう一度押すと消去" : "記録を消す"}
+          <Trash2 {...ICON} />
+          {/* 取り消せない操作なので、確認の文はそのまま出す */}
+          {confirmClear ? "もう一度押すと消去" : <BtnText text="記録を消す" short="消す" />}
         </button>
       </div>
     </fieldset>

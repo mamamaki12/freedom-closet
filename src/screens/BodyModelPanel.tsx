@@ -5,7 +5,7 @@ import { Viewer3D } from "../body/Figure3D";
 import { defaultScan } from "../body/measure";
 import type { BodyScan } from "../body/types";
 import { BodySizes } from "../components/BodySizes";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { bodyShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
 
@@ -40,9 +40,9 @@ export function BodyModelPanel({
       </div>
       {scan && <BodySizes scan={scan} profile={profile} />}
       <div className="row wrap">
-        <button className="btn primary" onClick={onScan}>
+        <button className="btn primary" onClick={onScan} title={scan ? "写真で作り直す" : "体の写真で作る"}>
           <ScanLine {...ICON} />
-          {scan ? "写真で作り直す" : "体の写真で作る"}
+          <BtnText text={scan ? "写真で作り直す" : "体の写真で作る"} short={scan ? "撮り直す" : "撮る"} />
         </button>
         {scan && (
           <button
@@ -54,7 +54,8 @@ export function BodyModelPanel({
             }}
           >
             <Trash2 {...ICON} />
-            {confirm ? "もう一度押すと消します" : "体型を消す"}
+            {/* 取り消せない操作なので、確認の文はそのまま出す */}
+            {confirm ? "もう一度押すと消します" : <BtnText text="体型を消す" short="消す" />}
           </button>
         )}
       </div>

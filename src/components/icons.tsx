@@ -38,3 +38,21 @@ export const ICON = { size: 18, strokeWidth: 2, "aria-hidden": true } as const;
 export function Icon({ of: C }: { of: LucideIcon }) {
   return <C {...ICON} />;
 }
+
+/**
+ * ボタンの文字。スマホ（幅640px以下か指で操作する端末）では文字を隠してアイコンだけにし、
+ * short があれば短い文字だけ見せる。元の文字は読み上げ用に残す（display:none にはしない）。
+ * PC では元の文字をそのまま出す。
+ */
+export function BtnText({ text, short }: { text: string; short?: string }) {
+  return (
+    <>
+      <span className="btn-text">{text}</span>
+      {short && (
+        <span className="btn-short" aria-hidden="true">
+          {short}
+        </span>
+      )}
+    </>
+  );
+}
