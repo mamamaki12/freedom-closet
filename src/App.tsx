@@ -2,7 +2,7 @@ import { Cloud, Settings, Shirt, ShoppingBag, Smartphone, Sparkles, Undo2, X, ty
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
-import { ICON } from "./components/icons";
+import { BtnText, ICON } from "./components/icons";
 import type { BodyScan } from "./body/types";
 import { shortLabel } from "./domain/colors";
 import type { Profile } from "./domain/profile";
@@ -124,6 +124,7 @@ export function App() {
           <span className="grow">「{undo.label}」を削除しました</span>
           <button
             className="btn small"
+            title="元に戻す"
             onClick={async () => {
               const { garment } = undo;
               setUndo(undefined);
@@ -136,7 +137,7 @@ export function App() {
             }}
           >
             <Undo2 {...ICON} />
-            元に戻す
+            <BtnText text="元に戻す" />
           </button>
           <button className="icon-btn" onClick={() => setUndo(undefined)} aria-label="閉じる" title="閉じる">
             <X {...ICON} />

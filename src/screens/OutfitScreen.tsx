@@ -1,11 +1,11 @@
 // コーデを3案。画面を開いたらすぐ出し、条件はタップで変えるだけ（変えたら出し直す）。
-import { CalendarCheck, Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, X } from "lucide-react";
+import { CalendarCheck, Check, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, Undo2, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { errorMessage, GarmentThumb } from "../components/common";
 import type { BodyScan } from "../body/types";
 import type { Profile } from "../domain/profile";
-import { FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
+import { BtnText, FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
 import { PURPOSES, PURPOSE_LABELS, toInfo, type Feedback, type Garment, type Outfit, type Purpose, type WearRecord } from "../domain/types";
 import { dayKey, recentWears } from "../domain/wear";
 import { LookPhotos, OutfitLook } from "./OutfitLook";
@@ -129,9 +129,9 @@ export function OutfitScreen({
         <p className="empty">
           コーデを出すには、トップスとボトムスを1着ずつ（またはワンピース）登録してください。
         </p>
-        <button className="btn primary wide" onClick={onGoCloset}>
+        <button className="btn primary wide" onClick={onGoCloset} title="服を登録する">
           <Plus {...ICON} />
-          服を登録する
+          <BtnText text="服を登録する" short="服を登録" />
         </button>
       </section>
     );
@@ -172,9 +172,9 @@ export function OutfitScreen({
               ))
             )}
           </div>
-          <button className="btn" onClick={() => setPicking(!picking)} aria-expanded={picking}>
+          <button className="btn" onClick={() => setPicking(!picking)} aria-expanded={picking} title={picking ? "閉じる" : "使いたい服を選ぶ"}>
             {picking ? <X {...ICON} /> : <Shirt {...ICON} />}
-            {picking ? "閉じる" : "使いたい服"}
+            {picking ? <BtnText text="閉じる" /> : <BtnText text="使いたい服" short="使う服" />}
           </button>
         </div>
         {picking && (
@@ -208,9 +208,9 @@ export function OutfitScreen({
               maxLength={300}
               enterKeyHint="done"
             />
-            <button className="btn" type="submit">
+            <button className="btn" type="submit" title="反映">
               <Check {...ICON} />
-              反映
+              <BtnText text="反映" />
             </button>
           </form>
         </details>
@@ -226,8 +226,9 @@ export function OutfitScreen({
               return g ? [<span key={id} className="must-item"><GarmentThumb garment={g} size="sm" /></span>] : [];
             })}
           </span>
-          <button className="btn ghost small" onClick={() => onWear(null)}>
-            取り消す
+          <button className="btn ghost small" onClick={() => onWear(null)} title="今日はこれを取り消す">
+            <Undo2 {...ICON} />
+            <BtnText text="取り消す" />
           </button>
         </div>
       )}
@@ -265,9 +266,10 @@ export function OutfitScreen({
                 className={`btn wear${todayWear?.outfitKey === o.key ? " on" : ""}`}
                 aria-pressed={todayWear?.outfitKey === o.key}
                 onClick={() => onWear(todayWear?.outfitKey === o.key ? null : o)}
+                title={todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"}
               >
                 <CalendarCheck {...ICON} />
-                {todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"}
+                <BtnText text={todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"} short="今日" />
               </button>
               <span className="grow" />
               <button
@@ -298,9 +300,16 @@ export function OutfitScreen({
           className="btn wide"
           disabled={loading}
           onClick={() => (outfits.length === 0 ? setPage(0) : setPage(page + 1))}
+          title={loading ? "考え中…" : outfits.length === 0 && page > 0 ? "最初の案にもどる" : "ほかの案を見る"}
         >
           <RefreshCw {...ICON} className={loading ? "spin" : undefined} />
-          {loading ? "考え中…" : outfits.length === 0 && page > 0 ? "最初の案にもどる" : "ほかの案を見る"}
+          {loading ? (
+            "考え中…"
+          ) : outfits.length === 0 && page > 0 ? (
+            <BtnText text="最初の案にもどる" short="最初へ" />
+          ) : (
+            <BtnText text="ほかの案を見る" short="ほかの案" />
+          )}
         </button>
       )}
     </section>

@@ -1,9 +1,9 @@
 // クローゼット。種類ごとに並べる。上の絞り込みで「確認したい服」「しばらく着ていない服」だけも見られる。
 // スマホの最初の画面で服が見えるよう、お知らせは1行にたたみ、説明文は一度見たら出さない。
-import { Archive, Bell, ChevronDown, ChevronRight, HelpCircle, Plus, X } from "lucide-react";
+import { Archive, Bell, ChevronDown, ChevronRight, Clock, Download, Eye, HelpCircle, Plus, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { GarmentThumb } from "../components/common";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
 import { daysAgoLabel, idleGarments, lastWornMap } from "../domain/wear";
 import type { BackupReminder } from "../storage/backupReminder";
@@ -94,9 +94,9 @@ export function ClosetScreen({
     <section className="panel">
       <div className="row between panel-head">
         <h2>クローゼット</h2>
-        <button className="btn primary" onClick={() => onAdd()}>
+        <button className="btn primary" onClick={() => onAdd()} title="服を追加">
           <Plus {...ICON} />
-          服を追加
+          <BtnText text="服を追加" />
         </button>
       </div>
 
@@ -131,10 +131,12 @@ export function ClosetScreen({
                       ? "服の写真は、この端末の中にだけ保存されています。機種変更や故障に備えて、バックアップを書き出しておきましょう。"
                       : `前回のバックアップから${backupReminder.days}日たち、そのあと服が増えました。新しいバックアップを書き出しておきましょう。`}
                     <span className="row" style={{ gap: 8, marginTop: 6 }}>
-                      <button type="button" className="btn small primary" onClick={onBackupNow}>
+                      <button type="button" className="btn small primary" onClick={onBackupNow} title="バックアップを書き出す">
+                        <Download {...ICON} />
                         書き出す
                       </button>
-                      <button type="button" className="btn small ghost" onClick={onSnoozeBackup}>
+                      <button type="button" className="btn small ghost" onClick={onSnoozeBackup} title="あとで知らせる">
+                        <Clock {...ICON} />
                         あとで
                       </button>
                     </span>
@@ -150,12 +152,14 @@ export function ClosetScreen({
                       <button
                         type="button"
                         className="btn small primary"
+                        title="確認したい服を見る"
                         onClick={() => {
                           setFilter("review");
                           setNoticeOpen(false);
                         }}
                       >
-                        確認したい服を見る
+                        <Eye {...ICON} />
+                        <BtnText text="確認したい服を見る" short="確認する" />
                       </button>
                     </span>
                   </span>

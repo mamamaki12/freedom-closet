@@ -1,5 +1,7 @@
+import { Download, Upload } from "lucide-react";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../components/common";
+import { BtnText, ICON } from "../components/icons";
 import type { Profile } from "../domain/profile";
 import type { Feedback, Garment, WearRecord } from "../domain/types";
 import { backupFileName, createBackup, parseBackup, type RestoredBackup } from "../storage/backup";
@@ -96,11 +98,18 @@ export function BackupPanel({
         </p>
       )}
       <div className="actions" style={{ justifyContent: "flex-start" }}>
-        <button className="btn" onClick={exportFile} disabled={busy || (garments.length === 0 && feedback.length === 0)}>
+        <button
+          className="btn"
+          onClick={exportFile}
+          disabled={busy || (garments.length === 0 && feedback.length === 0)}
+          title="バックアップを書き出す"
+        >
+          <Download {...ICON} />
           書き出す
         </button>
-        <label className={`btn${busy ? " disabled" : ""}`}>
-          ファイルから戻す
+        <label className={`btn${busy ? " disabled" : ""}`} title="ファイルから戻す">
+          <Upload {...ICON} />
+          <BtnText text="ファイルから戻す" short="戻す" />
           <input
             type="file"
             accept="application/json,.json"

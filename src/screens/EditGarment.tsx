@@ -2,7 +2,7 @@
 import { ArrowLeft, Check, HelpCircle, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { errorMessage } from "../components/common";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { CATEGORY_LABELS, toInfo, type Garment } from "../domain/types";
 import { GarmentEditor, type Draft } from "./GarmentEditor";
 
@@ -52,9 +52,9 @@ export function EditGarment({
         <button className="btn ghost icon-only" onClick={onClose} disabled={busy} aria-label="もどる" title="もどる">
           <ArrowLeft size={22} aria-hidden />
         </button>
-        <button className="btn" onClick={onStyle} disabled={busy}>
+        <button className="btn" onClick={onStyle} disabled={busy} title="この服でコーデ">
           <Sparkles {...ICON} />
-          この服でコーデ
+          <BtnText text="この服でコーデ" short="コーデ" />
         </button>
       </div>
 
@@ -82,9 +82,9 @@ export function EditGarment({
           <Trash2 {...ICON} />
           {confirmDelete && "もう一度押すと削除"}
         </button>
-        <button className="btn primary grow" onClick={save} disabled={busy}>
+        <button className="btn primary grow" onClick={save} disabled={busy} title="保存">
           <Check {...ICON} />
-          保存
+          <BtnText text="保存" />
         </button>
       </div>
     </section>

@@ -7,7 +7,7 @@ import { calibrateScan } from "../body/sizes";
 import type { BodyScan } from "../body/types";
 import { BodySizes } from "../components/BodySizes";
 import { errorMessage } from "../components/common";
-import { ICON } from "../components/icons";
+import { BtnText, ICON } from "../components/icons";
 import { bodyShape } from "../domain/look";
 import type { Profile } from "../domain/profile";
 import { PhotoPickers } from "./AddGarments";
@@ -115,9 +115,9 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
           )}
           {error && <p className="error">{error}</p>}
           {step === "side" && !busy && (
-            <button className="btn ghost wide" onClick={skipSide}>
+            <button className="btn ghost wide" onClick={skipSide} title="横向きはとばす（厚みは見積もりにする）">
               <SkipForward {...ICON} />
-              横向きはとばす（厚みは見積もりにする）
+              <BtnText text="横向きはとばす（厚みは見積もりにする）" short="とばす" />
             </button>
           )}
         </>
@@ -135,13 +135,13 @@ export function BodyScanScreen({ profile, onSave, onClose }: { profile: Profile;
           </p>
           <BodySizes scan={scan} profile={profile} />
           <div className="sticky-actions">
-            <button className="btn" onClick={restart}>
+            <button className="btn" onClick={restart} title="撮り直す">
               <RotateCcw {...ICON} />
               撮り直す
             </button>
-            <button className="btn primary grow" onClick={() => onSave(scan)}>
+            <button className="btn primary grow" onClick={() => onSave(scan)} title="この体型を使う">
               <Check {...ICON} />
-              この体型を使う
+              <BtnText text="この体型を使う" short="使う" />
             </button>
           </div>
         </>
