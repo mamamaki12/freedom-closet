@@ -2,7 +2,7 @@
 import { Check, Ruler, Search, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
-import { ColorChips, ColorDot, errorMessage, GarmentThumb } from "../components/common";
+import { ColorChips, ColorDot, errorMessage, GarmentChip } from "../components/common";
 import { BtnText, ICON } from "../components/icons";
 import { colorLabel } from "../domain/colors";
 import { recommendSize, type Profile } from "../domain/profile";
@@ -144,17 +144,23 @@ export function ShopScreen({
                 )
               );
             })()}
-            {s.matchesWith.length > 0 && (
-              <>
-                <p className="hint">合わせられる手持ちの服</p>
-                <div className="grid small">
-                  {s.matchesWith.slice(0, 6).map((id) => {
-                    const g = byId.get(id);
-                    return g ? <GarmentThumb key={id} garment={g} size="sm" /> : null;
-                  })}
-                </div>
-              </>
-            )}
+            {(() => {
+              // 合わせられる手持ちの服は、小さな写真と名前の1行で並べる（大きなタイルだと1件で1画面を使ってしまう）
+              const matches = s.matchesWith.flatMap((id) => byId.get(id) ?? []);
+              if (!matches.length) return null;
+              const shown = matches.slice(0, 6);
+              return (
+                <>
+                  <p className="hint">合わせられる手持ちの服</p>
+                  <ul className="garment-chips">
+                    {shown.map((g) => (
+                      <GarmentChip key={g.id} garment={g} />
+                    ))}
+                    {matches.length > shown.length && <li className="garment-chip rest">ほか{matches.length - shown.length}着</li>}
+                  </ul>
+                </>
+              );
+            })()}
             <div className="actions">
               {curated.map((c) => (
                 <a key={c.url} className="btn primary" href={c.url} target="_blank" rel="noopener noreferrer">

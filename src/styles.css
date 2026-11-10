@@ -69,6 +69,7 @@ body {
 .tag {
   margin-left: 8px;
   font-weight: normal;
+  white-space: nowrap; /* 「アウター」が2行に割れないように */
 }
 
 .panel {
@@ -320,6 +321,40 @@ select.text {
 }
 .grid.small {
   grid-template-columns: repeat(auto-fill, minmax(76px, 1fr));
+}
+/* 小さな写真と名前の1行。買い足しの「合わせられる手持ちの服」など、見せるだけの並び */
+.panel .garment-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+}
+.garment-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 36px;
+  padding: 4px 10px 4px 4px;
+  border-radius: 10px;
+  background: var(--bg);
+  white-space: nowrap;
+}
+.garment-chip img,
+.garment-chip-img {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  object-fit: cover;
+  display: block;
+  background: var(--line);
+}
+.garment-chip.rest {
+  padding-left: 10px;
+  color: var(--muted-strong);
 }
 .thumb {
   font: inherit;
