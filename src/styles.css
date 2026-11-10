@@ -79,6 +79,10 @@ body {
   font-size: 1.05rem;
   margin: 0 0 12px;
 }
+/* 見出しの行のボタンと、すぐ下のボタンをくっつけない */
+.panel-head {
+  margin-bottom: 8px;
+}
 .group h3,
 .outfit h3 {
   font-size: 0.95rem;
@@ -141,8 +145,9 @@ select.text {
 .chips {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  margin-bottom: 6px;
+  /* 指で押し分けやすいよう、チップどうしは 8px あける */
+  gap: 8px;
+  margin-bottom: 8px;
 }
 .chip {
   font: inherit;
@@ -428,6 +433,7 @@ button.thumb {
 }
 .seg {
   display: flex;
+  gap: 4px;
   background: var(--bg);
   border-radius: 10px;
   padding: 3px;
@@ -443,7 +449,7 @@ button.thumb {
   border: 0;
   border-radius: 8px;
   padding: 8px 6px;
-  min-height: 40px;
+  min-height: 44px;
   cursor: pointer;
 }
 .seg button.on {
@@ -486,6 +492,7 @@ button.thumb {
 }
 .more summary {
   cursor: pointer;
+  min-height: 44px;
   padding: 10px 0;
   font-size: 0.9rem;
   display: flex;
@@ -499,6 +506,14 @@ button.thumb {
 }
 .more-body {
   padding-bottom: 8px;
+}
+/* 開いたとき、「詳しく」などの見出しと中のボタンがくっつかないように */
+.more[open] > summary {
+  margin-bottom: 8px;
+}
+/* 素材のライセンスなど、行ごとのリンクが上下でくっつかないように */
+ul.more-body li + li {
+  margin-top: 8px;
 }
 /* 保存ボタンは、下のタブのすぐ上に固定して、いつでも押せるようにする */
 .sticky-actions {
@@ -611,12 +626,25 @@ button.thumb {
 .choose .row {
   margin-bottom: 8px;
 }
+/* 「もう一度判定する」と「やめる」は、押し分けやすいよう離し、押せる高さを 44px にする */
+.choose-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.choose-actions .btn {
+  min-height: 44px;
+}
 
 .size-row {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+}
+.size-row + .size-row {
+  margin-top: 8px;
 }
 .size-row .chips.scroll {
   margin: 0 -16px 0 0;
@@ -966,23 +994,88 @@ legend.with-icon {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.banner {
-  font: inherit;
+/* クローゼットのお知らせ。ふだんは1行にたたみ、タップで中身を開く */
+.closet-notice {
   font-size: 0.85rem;
-  color: inherit;
-  text-align: left;
-  width: 100%;
-  display: flex;
-  gap: 8px;
-  align-items: flex-start;
   background: color-mix(in srgb, #f6c343 22%, var(--panel));
   border: 1px solid color-mix(in srgb, #f6c343 55%, var(--line));
   border-radius: 10px;
-  padding: 10px 12px;
   margin-bottom: 10px;
-  cursor: pointer;
 }
-.banner svg {
+.closet-notice-row {
+  display: flex;
+  align-items: stretch;
+  /* 開く（行）と閉じる（×）を押し分けやすく */
+  gap: 8px;
+}
+.closet-notice-summary,
+.closet-notice-close {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.closet-notice-summary {
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  padding: 0 4px 0 12px;
+  text-align: left;
+}
+.closet-notice-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+.closet-notice-title,
+.closet-notice-detail {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.closet-notice-title {
+  flex: 0 1 auto;
+  font-weight: 600;
+}
+/* 何のお知らせか。狭い画面では後ろを「…」で切る */
+.closet-notice-detail {
+  /* 狭いときは、件数より先にこちらを縮める */
+  flex: 0 100 auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.closet-notice-summary svg,
+.closet-notice-close svg {
+  flex: none;
+}
+.closet-notice-close {
+  flex: none;
+  min-width: 44px;
+  justify-content: center;
+  color: var(--muted);
+}
+.closet-notice-body {
+  border-top: 1px solid color-mix(in srgb, #f6c343 55%, var(--line));
+  padding: 4px 12px;
+}
+.closet-notice-item {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 0;
+}
+.closet-notice-item + .closet-notice-item {
+  border-top: 1px dashed color-mix(in srgb, #f6c343 55%, var(--line));
+}
+.closet-notice-item > svg {
   flex: none;
   margin-top: 3px;
 }

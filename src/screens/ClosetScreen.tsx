@@ -1,12 +1,15 @@
 // クローゼット。種類ごとに並べる。上の絞り込みで「確認したい服」「しばらく着ていない服」だけも見られる。
-import { Archive, HelpCircle, Plus } from "lucide-react";
-import { useState } from "react";
+// スマホの最初の画面で服が見えるよう、お知らせは1行にたたみ、説明文は一度見たら出さない。
+import { Archive, Bell, ChevronDown, ChevronRight, HelpCircle, Plus, X } from "lucide-react";
+import { useEffect, useId, useState } from "react";
 import { GarmentThumb } from "../components/common";
 import { ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
 import { daysAgoLabel, idleGarments, lastWornMap } from "../domain/wear";
 import type { BackupReminder } from "../storage/backupReminder";
+import { closedNoticeKey, closetHintSeen, markClosetHintSeen, saveClosedNoticeKey } from "../storage/closetHints";
 import { PhotoPickers } from "./AddGarments";
+import { closetNotices, noticeKey, noticeSummary } from "./closetNotices";
 
 type Filter = "all" | "review" | "idle" | Category;
 
@@ -33,6 +36,15 @@ export function ClosetScreen({
   onSnoozeBackup?: () => void;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [noticeOpen, setNoticeOpen] = useState(false);
+  const [closedKey, setClosedKey] = useState(closedNoticeKey);
+  // 説明文は、はじめて服が並んだ画面でだけ出す（この画面を開いている間は出したまま）
+  const [showHint] = useState(() => !closetHintSeen());
+  const noticeId = useId();
+  const hasGarments = garments.length > 0;
+  useEffect(() => {
+    if (hasGarments && showHint) markClosetHintSeen();
+  }, [hasGarments, showHint]);
 
   if (garments.length === 0) {
     return (
@@ -61,6 +73,18 @@ export function ClosetScreen({
     ),
   ];
 
+  const notices = closetNotices({ backupReminder, reviewCount: review.length, reviewFilterOn: active === "review" });
+  const showNotices = notices.length > 0 && closedKey !== noticeKey(notices);
+  const closeNotices = () => {
+    const key = noticeKey(notices);
+    saveClosedNoticeKey(key);
+    setClosedKey(key);
+    setNoticeOpen(false);
+  };
+  const summary = noticeSummary(notices, review.length);
+  const SummaryIcon = notices.length > 1 ? Bell : notices[0] === "backup" ? Archive : HelpCircle;
+  const tapHint = "服をタップすると、直したり、その服でコーデを見たりできます。";
+
   const caption = (g: Garment) => {
     const day = lastWorn.get(g.id);
     return day ? `${daysAgoLabel(day)}に着た` : wears.length > 0 ? "まだ記録なし" : undefined;
@@ -68,40 +92,78 @@ export function ClosetScreen({
 
   return (
     <section className="panel">
-      <div className="row between">
-        <h2>クローゼット（{garments.length}着）</h2>
+      <div className="row between panel-head">
+        <h2>クローゼット</h2>
         <button className="btn primary" onClick={() => onAdd()}>
           <Plus {...ICON} />
           服を追加
         </button>
       </div>
 
-      {backupReminder && (
-        <div className="banner" role="status" style={{ cursor: "default" }}>
-          <Archive {...ICON} />
-          <span className="grow">
-            {backupReminder.kind === "never"
-              ? "服の写真は、この端末の中にだけ保存されています。機種変更や故障に備えて、バックアップを書き出しておきましょう。"
-              : `前回のバックアップから${backupReminder.days}日たち、そのあと服が増えました。新しいバックアップを書き出しておきましょう。`}
-            <span className="row" style={{ gap: 8, marginTop: 6 }}>
-              <button type="button" className="btn small primary" onClick={onBackupNow}>
-                書き出す
-              </button>
-              <button type="button" className="btn small ghost" onClick={onSnoozeBackup}>
-                あとで
-              </button>
-            </span>
-          </span>
+      {showNotices && (
+        <div className="closet-notice" role="status">
+          <div className="closet-notice-row">
+            <button
+              type="button"
+              className="closet-notice-summary"
+              aria-expanded={noticeOpen}
+              aria-controls={noticeId}
+              onClick={() => setNoticeOpen((v) => !v)}
+            >
+              <SummaryIcon {...ICON} />
+              <span className="closet-notice-text">
+                <span className="closet-notice-title">{summary.title}</span>
+                {summary.detail && <span className="closet-notice-detail">{summary.detail}</span>}
+              </span>
+              {noticeOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
+            </button>
+            <button type="button" className="closet-notice-close" aria-label="お知らせを閉じる" onClick={closeNotices}>
+              <X {...ICON} />
+            </button>
+          </div>
+          {noticeOpen && (
+            <div id={noticeId} className="closet-notice-body">
+              {backupReminder && notices.includes("backup") && (
+                <div className="closet-notice-item">
+                  <Archive {...ICON} />
+                  <span className="grow">
+                    {backupReminder.kind === "never"
+                      ? "服の写真は、この端末の中にだけ保存されています。機種変更や故障に備えて、バックアップを書き出しておきましょう。"
+                      : `前回のバックアップから${backupReminder.days}日たち、そのあと服が増えました。新しいバックアップを書き出しておきましょう。`}
+                    <span className="row" style={{ gap: 8, marginTop: 6 }}>
+                      <button type="button" className="btn small primary" onClick={onBackupNow}>
+                        書き出す
+                      </button>
+                      <button type="button" className="btn small ghost" onClick={onSnoozeBackup}>
+                        あとで
+                      </button>
+                    </span>
+                  </span>
+                </div>
+              )}
+              {notices.includes("review") && (
+                <div className="closet-notice-item">
+                  <HelpCircle {...ICON} />
+                  <span className="grow">
+                    自動判定に自信がない服が<strong>{review.length}着</strong>あります。ざっと見て、違っていれば直してください。
+                    <span className="row" style={{ gap: 8, marginTop: 6 }}>
+                      <button
+                        type="button"
+                        className="btn small primary"
+                        onClick={() => {
+                          setFilter("review");
+                          setNoticeOpen(false);
+                        }}
+                      >
+                        確認したい服を見る
+                      </button>
+                    </span>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
-      {review.length > 0 && active !== "review" && (
-        <button className="banner" onClick={() => setFilter("review")}>
-          <HelpCircle {...ICON} />
-          <span>
-            自動判定に自信がない服が<strong>{review.length}着</strong>あります。ざっと見て、違っていれば直してください。
-          </span>
-        </button>
       )}
 
       <div className="chips scroll" role="tablist" aria-label="絞り込み">
@@ -122,7 +184,7 @@ export function ClosetScreen({
 
       {active === "all" ? (
         <>
-          <p className="hint">服をタップすると、直したり、その服でコーデを見たりできます。</p>
+          {showHint && <p className="hint">{tapHint}</p>}
           {CATEGORIES.map((c) => {
             const items = garments.filter((g) => g.category === c);
             if (items.length === 0) return null;
@@ -142,13 +204,13 @@ export function ClosetScreen({
         </>
       ) : (
         <>
-          <p className="hint">
-            {active === "review"
-              ? "タップして開き、合っていればそのまま保存すると目印が消えます。"
-              : active === "idle"
-                ? "30日以上「今日はこれ」に入っていない服です。コーデ画面の「使いたい服」に入れると出番が作れます。"
-                : "服をタップすると、直したり、その服でコーデを見たりできます。"}
-          </p>
+          {active === "review" ? (
+            <p className="hint">タップして開き、合っていればそのまま保存すると目印が消えます。</p>
+          ) : active === "idle" ? (
+            <p className="hint">30日以上「今日はこれ」に入っていない服です。コーデ画面の「使いたい服」に入れると出番が作れます。</p>
+          ) : (
+            showHint && <p className="hint">{tapHint}</p>
+          )}
           <div className="grid">
             {(active === "review" ? review : active === "idle" ? idle : garments.filter((g) => g.category === active)).map((g) => (
               <GarmentThumb key={g.id} garment={g} onClick={() => onEdit(g)} caption={active === "idle" ? caption(g) : undefined} />

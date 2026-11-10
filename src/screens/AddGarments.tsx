@@ -284,16 +284,18 @@ function ChooseType({
               {!item.analysis && "　色も分からなかったので、登録したあとで直してください。"}
             </p>
           )}
-          {canRetry && (
-            <button className="btn ghost small" onClick={onRetry}>
-              <RotateCcw {...ICON} />
-              もう一度判定する
+          <div className="choose-actions">
+            {canRetry && (
+              <button className="btn ghost small" onClick={onRetry}>
+                <RotateCcw {...ICON} />
+                もう一度判定する
+              </button>
+            )}
+            <button className="btn ghost small" onClick={onRemove}>
+              <Ban {...ICON} />
+              服ではない・やめる
             </button>
-          )}
-          <button className="btn ghost small" onClick={onRemove}>
-            <Ban {...ICON} />
-            服ではない・やめる
-          </button>
+          </div>
         </div>
       </div>
       {CATEGORIES.map((c) => (
