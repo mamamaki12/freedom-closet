@@ -50,3 +50,16 @@ export function daysAgoLabel(day: string, now = new Date()): string {
   if (diff < 365) return `${Math.floor(diff / 30)}か月前`;
   return "1年以上前";
 }
+
+/** 「3日前に着た」のような言い方（一覧の写真の下と、服の詳細で使う） */
+export function wornLabel(day: string, now = new Date()): string {
+  return `${daysAgoLabel(day, now)}に着た`;
+}
+
+/** 1着の着た記録の1行：「3日前に着た・5回」。記録が無ければ「まだ記録なし」 */
+export function wearSummaryLine(garmentId: string, wears: WearRecord[], now = new Date()): string {
+  const days = wears.filter((w) => w.garmentIds.includes(garmentId)).map((w) => w.day);
+  if (days.length === 0) return "まだ記録なし";
+  const last = days.reduce((a, b) => (a > b ? a : b));
+  return `${wornLabel(last, now)}・${days.length}回`;
+}

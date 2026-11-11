@@ -1,19 +1,23 @@
 // 登録済みの服を直す・消す。ここから「この服でコーデ」にも進める。
-import { ArrowLeft, Check, HelpCircle, Sparkles, Trash2 } from "lucide-react";
+import { ArrowLeft, CalendarCheck, Check, HelpCircle, Sparkles, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { errorMessage } from "../components/common";
 import { BtnText, ICON } from "../components/icons";
-import { CATEGORY_LABELS, toInfo, type Garment } from "../domain/types";
+import { CATEGORY_LABELS, toInfo, type Garment, type WearRecord } from "../domain/types";
+import { wearSummaryLine } from "../domain/wear";
 import { GarmentEditor, type Draft } from "./GarmentEditor";
 
 export function EditGarment({
   garment,
+  wears,
   onSave,
   onDelete,
   onClose,
   onStyle,
 }: {
   garment: Garment;
+  /** 着た記録（最後に着た日と回数を出す） */
+  wears: WearRecord[];
   onSave: (g: Garment) => Promise<void>;
   onDelete: () => Promise<void>;
   onClose: () => void;
@@ -57,6 +61,12 @@ export function EditGarment({
           <BtnText text="この服でコーデ" short="コーデ" />
         </button>
       </div>
+
+      <p className="worn-line">
+        <CalendarCheck {...ICON} />
+        <span className="sr-only">着た記録：</span>
+        {wearSummaryLine(garment.id, wears)}
+      </p>
 
       {garment.needsReview && (
         <p className="status warn with-icon" role="status">

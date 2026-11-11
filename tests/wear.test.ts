@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Garment } from "../src/domain/types";
-import { dayKey, daysAgoLabel, idleGarments, lastWornMap, recentWears } from "../src/domain/wear";
+import { dayKey, daysAgoLabel, idleGarments, lastWornMap, recentWears, wearSummaryLine } from "../src/domain/wear";
 
 const now = new Date("2026-10-30T10:00:00");
 const garment = (id: string, createdDaysAgo: number): Garment =>
@@ -36,5 +36,21 @@ describe("着た記録", () => {
     expect(daysAgoLabel("2026-10-29", now)).toBe("昨日");
     expect(daysAgoLabel("2026-10-20", now)).toBe("10日前");
     expect(daysAgoLabel("2026-07-20", now)).toBe("3か月前");
+  });
+});
+
+describe("服の詳細の着た記録", () => {
+  it("最後に着た日と回数を1行で出す", () => {
+    const wears = [
+      { day: "2026-10-27", garmentIds: ["a", "b"], at: 0 },
+      { day: "2026-10-20", garmentIds: ["a"], at: 0 },
+      { day: "2026-10-29", garmentIds: ["b"], at: 0 },
+    ];
+    expect(wearSummaryLine("a", wears, now)).toBe("3日前に着た・2回");
+    expect(wearSummaryLine("b", wears, now)).toBe("昨日に着た・2回");
+  });
+  it("記録が無ければ「まだ記録なし」", () => {
+    expect(wearSummaryLine("x", [{ day: "2026-10-27", garmentIds: ["a"], at: 0 }], now)).toBe("まだ記録なし");
+    expect(wearSummaryLine("x", [], now)).toBe("まだ記録なし");
   });
 });

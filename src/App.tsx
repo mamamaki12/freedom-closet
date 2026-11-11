@@ -1,8 +1,8 @@
 import { Cloud, Settings, Shirt, ShoppingBag, Smartphone, Sparkles, Undo2, X, type LucideIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createAI, type AISettings } from "./ai";
 import { errorMessage } from "./components/common";
-import { BtnText, ICON } from "./components/icons";
+import { ICON } from "./components/icons";
 import type { BodyScan } from "./body/types";
 import { shortLabel } from "./domain/colors";
 import type { Profile } from "./domain/profile";
@@ -81,6 +81,19 @@ export function App() {
     return () => clearTimeout(t);
   }, [undo]);
 
+  // 「元に戻す」の帯の高さぶん、右下の丸いボタンや保存のバーを上にずらす（文字が2行になっても重ならないように）
+  const undoBarRef = useRef<HTMLDivElement>(null);
+  const [undoLift, setUndoLift] = useState(0);
+  useLayoutEffect(() => {
+    const el = undoBarRef.current;
+    if (!undo || !el) return setUndoLift(0);
+    const measure = () => setUndoLift(Math.ceil(el.getBoundingClientRect().height) + 8);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [undo]);
+
   const backupData = { garments, feedback, wears, profile };
   const reminder = backupReminder(garments, lastBackupAt, backupSnooze);
   const markBackedUp = (at = Date.now()) => setLastBackupAt(saveLastBackup(at));
@@ -102,7 +115,7 @@ export function App() {
   };
 
   return (
-    <div className="app">
+    <div className="app" style={undoLift ? ({ "--undo-lift": `${undoLift}px` } as CSSProperties) : undefined}>
       <header className="top">
         <h1>freedom closet</h1>
         <span className="badge with-icon">
@@ -119,32 +132,6 @@ export function App() {
           </button>
         </div>
       )}
-      {undo && (
-        <div className="notice" role="status">
-          <span className="grow">「{undo.label}」を削除しました</span>
-          <button
-            className="btn small"
-            title="元に戻す"
-            onClick={async () => {
-              const { garment } = undo;
-              setUndo(undefined);
-              try {
-                await db.saveGarment(garment);
-                await reload();
-              } catch (e) {
-                setNotice(`元に戻せませんでした（${errorMessage(e)}）`);
-              }
-            }}
-          >
-            <Undo2 {...ICON} />
-            <BtnText text="元に戻す" />
-          </button>
-          <button className="icon-btn" onClick={() => setUndo(undefined)} aria-label="閉じる" title="閉じる">
-            <X {...ICON} />
-          </button>
-        </div>
-      )}
-
       <main>
         {sheet?.kind === "add" ? (
           <AddGarments
@@ -184,6 +171,7 @@ export function App() {
           <EditGarment
             key={sheet.garment.id}
             garment={sheet.garment}
+            wears={wears}
             onClose={() => setSheet(null)}
             onSave={async (g) => {
               await db.saveGarment(g);
@@ -285,6 +273,36 @@ export function App() {
           </SettingsScreen>
         )}
       </main>
+
+      {/* 消したあとの「元に戻す」。下のタブのすぐ上に出す（読み上げには下の文で伝える） */}
+      <p className="sr-only" role="status">
+        {undo ? `「${undo.label}」を削除しました。画面の下の「元に戻す」で戻せます。` : ""}
+      </p>
+      {undo && (
+        <div className="undo-bar" ref={undoBarRef}>
+          <span className="grow">「{undo.label}」を削除</span>
+          <button
+            className="btn small"
+            title="元に戻す"
+            onClick={async () => {
+              const { garment } = undo;
+              setUndo(undefined);
+              try {
+                await db.saveGarment(garment);
+                await reload();
+              } catch (e) {
+                setNotice(`元に戻せませんでした（${errorMessage(e)}）`);
+              }
+            }}
+          >
+            <Undo2 {...ICON} />
+            元に戻す
+          </button>
+          <button className="icon-btn" onClick={() => setUndo(undefined)} aria-label="閉じる" title="閉じる">
+            <X {...ICON} />
+          </button>
+        </div>
+      )}
 
       <nav className="tabs">
         {TABS.map((t) => (

@@ -6,7 +6,7 @@ import { useEffect, useId, useState } from "react";
 import { GarmentThumb } from "../components/common";
 import { BtnText, ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
-import { daysAgoLabel, idleGarments, lastWornMap } from "../domain/wear";
+import { idleGarments, lastWornMap, wornLabel } from "../domain/wear";
 import type { BackupReminder } from "../storage/backupReminder";
 import { closedNoticeKey, closetHintSeen, markClosetHintSeen, saveClosedNoticeKey } from "../storage/closetHints";
 import { PhotoPickers } from "./AddGarments";
@@ -88,7 +88,7 @@ export function ClosetScreen({
 
   const caption = (g: Garment) => {
     const day = lastWorn.get(g.id);
-    return day ? `${daysAgoLabel(day)}に着た` : wears.length > 0 ? "まだ記録なし" : undefined;
+    return day ? wornLabel(day) : wears.length > 0 ? "まだ記録なし" : undefined;
   };
 
   return (
