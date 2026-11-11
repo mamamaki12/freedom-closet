@@ -154,6 +154,7 @@ ${JSON.stringify(feedback.map((f) => ({ garmentIds: f.garmentIds, liked: f.liked
 - 手持ちとほぼ同じ服は避ける。
 - searchQuery はユニクロ・GUの検索窓にそのまま入れる短い日本語（例：黒 ワイドパンツ）。
 - matchesWith には合わせられる手持ちの服のIDを入れ、newOutfitCount は増えるコーデのおおよその数。
-- 本人の身長が分かるときは、似合いやすい丈やシルエットの服を優先し、reason でひとこと触れる。`;
+- 本人の身長が分かるときは、似合いやすい丈やシルエットの服を優先し、reason でひとこと触れる。
+- reason には、増えるコーデの数や合わせられる服の数を書かない（画面に別に出すため）。手持ちとどう合うか・どんな場面で役立つかを短く。`;
   return ask(purchasesResultSchema, text, "medium");
 }

@@ -1723,3 +1723,58 @@ p[role="status"]:empty {
 .garment-face + .garment-face {
   margin-left: -8px;
 }
+.matches-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+/* 「コーデ +14通り」：たたんだ行の2段目に、少し小さく色を付けて出す */
+.matches-gain {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+.matches-gain.alone {
+  margin: 4px 0 0;
+}
+
+/* --- 服の詳細の種類のタブ：狭い画面では 3つ＋2つ の2段（横にずらさず全部見せる） --- */
+@media (max-width: 520px) {
+  .seg {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    /* 上下の段は 8px あける（押し分けやすく） */
+    row-gap: 8px;
+    overflow: visible;
+  }
+  .seg button {
+    grid-column: span 2;
+    min-width: 0;
+  }
+  .seg button:nth-child(n + 4) {
+    grid-column: span 3;
+  }
+}
+
+/* --- 買い足し：検索のボタンは同じ幅で横いっぱい（上の「手持ち◯着」の行と左右の端をそろえる） --- */
+.shop-links > .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+/* 店の商品へのボタン（文字が長い）は1行を使う */
+.shop-links > .btn.primary {
+  flex-basis: 100%;
+}
+/* とても狭い画面では、たたんだ行の小さな写真を出さず、文を1行に収める */
+@media (max-width: 359px) {
+  .matches .garment-faces {
+    display: none;
+  }
+}
+/* 「（いつものサイズ）」は途中で割らずに、まとめて次の行へ */
+.size-hint .hint {
+  display: inline-block;
+  margin-left: 4px;
+  white-space: nowrap;
+}

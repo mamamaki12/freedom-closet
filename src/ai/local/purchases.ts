@@ -1,6 +1,7 @@
 // 端末内AIの買い足し提案。定番アイテムの候補を1つずつ仮に足してみて、
 // 増えるコーデの数・手持ちとの重複・避けたい色から順位を付ける。
 import { colorLabel } from "../../domain/colors";
+import { CATEGORIES, CATEGORY_LABELS } from "../../domain/types";
 import type {
   Category,
   ColorName,
@@ -77,14 +78,15 @@ export function suggestPurchasesLocal(
         .flatMap((c) => c.items.filter((g) => g.id !== "__new__" && g.category !== "shoes").map((g) => g.id));
       const matchesWith = [...new Set(matches)];
 
-      const name = `${colorLabel(color)}の${basic.subType}`;
       const sameCategory = closet.filter((g) => g.category === basic.category).length;
-      // 服が多いと「591通り」のような実感のない数になるので、大きい数はまるめる
-      const more = gained >= 100 ? "100通り以上" : `${gained}通り`;
+      // 説明文には数を書かない（増えるコーデの数・合わせられる服の数は、画面で別に出す）
+      const matchedCategories = CATEGORIES.filter((c) => closet.some((g) => g.category === c && matchesWith.includes(g.id)));
       const reason =
         sameCategory === 0
-          ? `${name}があると、まだ持っていない種類が埋まり、コーデが${more}増えます。`
-          : `手持ちの服${matchesWith.length}着と合わせられ、コーデが${more}増えます。`;
+          ? `まだ持っていない${CATEGORY_LABELS[basic.category]}が加わり、組み合わせの幅が広がります。`
+          : matchedCategories.length
+            ? `手持ちの${matchedCategories.map((c) => CATEGORY_LABELS[c]).join("・")}と合わせやすい色です。`
+            : "手持ちの服と合わせやすい定番です。";
 
       results.push({
         category: basic.category,
