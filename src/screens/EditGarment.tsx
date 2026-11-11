@@ -94,7 +94,8 @@ export function EditGarment({
         </button>
         <button className="btn primary grow" onClick={save} disabled={busy} title="保存">
           <Check {...ICON} />
-          <BtnText text="保存" />
+          {/* 広いボタンなので、スマホでも「保存」の文字を出す */}
+          <BtnText text="保存" short="保存" />
         </button>
       </div>
     </section>

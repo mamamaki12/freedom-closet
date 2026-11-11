@@ -87,6 +87,7 @@ export function GarmentEditor({
       )}
 
       <section className="field-group" aria-label="種類">
+        {/* 狭い画面では 3つ＋2つ の2段にして、右端で切れないようにする */}
         <div className="seg" role="tablist">
           {CATEGORIES.map((c) => (
             <button
@@ -185,9 +186,10 @@ export function GarmentEditor({
         )}
       </section>
 
+      {/* 設定の「いつものサイズ」と同じ、同じ幅のマス目（右端で切れない） */}
       <section className="field-group size-row" aria-label="サイズ">
         <span className="size-row-label">サイズ</span>
-        <div className="chips scroll">
+        <div className={`size-grid ${value.category === "shoes" ? "shoes" : "clothing"}`}>
           {sizeChoices.map((s) => (
             <button
               key={s}

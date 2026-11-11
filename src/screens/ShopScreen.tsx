@@ -8,6 +8,7 @@ import { colorLabel } from "../domain/colors";
 import { recommendSize, type Profile } from "../domain/profile";
 import { CATEGORY_LABELS, toInfo, type ColorName, type Feedback, type Garment, type PurchaseSuggestion } from "../domain/types";
 import { findCurated } from "../shop/curated";
+import { outfitGainLabel } from "../shop/labels";
 import { searchLinks } from "../shop/links";
 
 export function ShopScreen({
@@ -138,8 +139,11 @@ export function ShopScreen({
                 size && (
                   <p className="with-icon size-hint">
                     <Ruler {...ICON} />
-                    サイズの目安：<strong>{size.size}</strong>
-                    <span className="hint">{size.basis === "usual" ? "（いつものサイズ）" : "（身長・体重から）"}</span>
+                    {/* 文はひとまとまりで折り返す（狭い画面で「サイズの目 / 安：」のように割れないように） */}
+                    <span>
+                      サイズの目安：<strong>{size.size}</strong>
+                      <span className="hint">{size.basis === "usual" ? "（いつものサイズ）" : "（身長・体重から）"}</span>
+                    </span>
                   </p>
                 )
               );
@@ -147,8 +151,10 @@ export function ShopScreen({
             {(() => {
               // 合わせられる手持ちの服は「手持ち6着と合わせられる」の1行にたたみ、押すと小さな写真と名前で全部見せる
               // （開いたままだと案ごとに2〜3行を使い、買い足しの画面がとても長くなるため）
+              // 増えるコーデの数も、この1行の2段目に出す（説明文では繰り返さない）
               const matches = s.matchesWith.flatMap((id) => byId.get(id) ?? []);
-              if (!matches.length) return null;
+              const gain = s.newOutfitCount > 0 ? `コーデ ${outfitGainLabel(s.newOutfitCount)}` : undefined;
+              if (!matches.length) return gain ? <p className="matches-gain alone">{gain}</p> : null;
               return (
                 <details className="matches">
                   <summary>
@@ -157,8 +163,11 @@ export function ShopScreen({
                         <GarmentFace key={g.id} garment={g} />
                       ))}
                     </span>
-                    <span className="grow">
-                      手持ち<strong>{matches.length}着</strong>と合わせられる
+                    <span className="grow matches-text">
+                      <span>
+                        手持ち<strong>{matches.length}着</strong>と合わせられる
+                      </span>
+                      {gain && <span className="matches-gain">{gain}</span>}
                     </span>
                     <ChevronDown className="matches-chevron" {...ICON} />
                   </summary>
@@ -170,7 +179,8 @@ export function ShopScreen({
                 </details>
               );
             })()}
-            <div className="actions">
+            {/* 検索のボタンは同じ幅で横いっぱいに並べ、上の1行と左右の端をそろえる */}
+            <div className="actions shop-links">
               {curated.map((c) => (
                 <a key={c.url} className="btn primary" href={c.url} target="_blank" rel="noopener noreferrer">
                   <ShoppingBag {...ICON} />
