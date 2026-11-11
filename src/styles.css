@@ -390,6 +390,11 @@ button.thumb {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+.thumb-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .hint,
 .empty {
@@ -1830,4 +1835,64 @@ p[role="status"]:empty {
     font-size: 0.65rem;
     white-space: nowrap;
   }
+}
+
+/* --- 服の名前：「デニムジャケット」のように分けられる長い名前は、言葉の切れ目で2行まで折り返す（途中で切らない） --- */
+.thumb-label:has(.thumb-name.split) {
+  white-space: normal;
+  align-items: flex-start;
+}
+.thumb-label:has(.thumb-name.split) .color-dot {
+  margin-top: 0.2em;
+}
+.thumb-name.split {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: keep-all;
+}
+
+/* --- 服を追加：見出しの行（左に「もどる」、右に「完了」） --- */
+.add-head {
+  margin-bottom: 12px;
+  min-height: 44px;
+}
+.add-title {
+  gap: 4px;
+  margin-left: -8px;
+}
+.add-head h2 {
+  margin: 0;
+}
+
+/* --- クローゼットのお知らせ：狭い画面では件名と中身を2段にして、途中で切らない --- */
+@media (max-width: 400px) {
+  .closet-notice-text {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding: 6px 0;
+    white-space: normal;
+  }
+  .closet-notice-title,
+  .closet-notice-detail {
+    max-width: 100%;
+  }
+  .closet-notice-detail {
+    white-space: nowrap;
+  }
+}
+
+/* --- 横にずらすチップの列：続きがある側の端を薄くする（チップが途中で切れていても「まだある」と分かる） --- */
+.chips.scroll.more-right {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent);
+}
+.chips.scroll.more-left {
+  -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent);
+}
+.chips.scroll.more-left.more-right {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
 }
