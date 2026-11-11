@@ -1,8 +1,8 @@
 // 買い足し提案。買う服の種類・色を決めて、ユニクロ・GUの公式サイトの検索結果へつなぐ。
-import { Check, Ruler, Search, ShoppingBag, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, Ruler, Search, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
-import { ColorChips, ColorDot, errorMessage, GarmentChip } from "../components/common";
+import { ColorChips, ColorDot, errorMessage, GarmentChip, GarmentFace } from "../components/common";
 import { BtnText, ICON } from "../components/icons";
 import { colorLabel } from "../domain/colors";
 import { recommendSize, type Profile } from "../domain/profile";
@@ -145,20 +145,29 @@ export function ShopScreen({
               );
             })()}
             {(() => {
-              // 合わせられる手持ちの服は、小さな写真と名前の1行で並べる（大きなタイルだと1件で1画面を使ってしまう）
+              // 合わせられる手持ちの服は「手持ち6着と合わせられる」の1行にたたみ、押すと小さな写真と名前で全部見せる
+              // （開いたままだと案ごとに2〜3行を使い、買い足しの画面がとても長くなるため）
               const matches = s.matchesWith.flatMap((id) => byId.get(id) ?? []);
               if (!matches.length) return null;
-              const shown = matches.slice(0, 6);
               return (
-                <>
-                  <p className="hint">合わせられる手持ちの服</p>
+                <details className="matches">
+                  <summary>
+                    <span className="garment-faces" aria-hidden>
+                      {matches.slice(0, 4).map((g) => (
+                        <GarmentFace key={g.id} garment={g} />
+                      ))}
+                    </span>
+                    <span className="grow">
+                      手持ち<strong>{matches.length}着</strong>と合わせられる
+                    </span>
+                    <ChevronDown className="matches-chevron" {...ICON} />
+                  </summary>
                   <ul className="garment-chips">
-                    {shown.map((g) => (
+                    {matches.map((g) => (
                       <GarmentChip key={g.id} garment={g} />
                     ))}
-                    {matches.length > shown.length && <li className="garment-chip rest">ほか{matches.length - shown.length}着</li>}
                   </ul>
-                </>
+                </details>
               );
             })()}
             <div className="actions">

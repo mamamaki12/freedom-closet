@@ -1,5 +1,5 @@
 import { HelpCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { COLORS, shortLabel } from "../domain/colors";
 import type { ColorName, Garment } from "../domain/types";
 
@@ -27,7 +27,7 @@ export function GarmentThumb({
   onClick?: () => void;
   size?: "sm" | "md";
   /** 名前の下に小さく出す補足（「3日前」など） */
-  caption?: string;
+  caption?: ReactNode;
   /** いま登録したばかりの服に「新しい」の印を付ける */
   isNew?: boolean;
 }) {
@@ -68,6 +68,16 @@ export function GarmentChip({ garment }: { garment: Garment }) {
       {url ? <img src={url} alt="" /> : <span className="garment-chip-img" style={{ background: COLORS[garment.color].hex }} aria-hidden />}
       {label}
     </li>
+  );
+}
+
+/** 服の小さな写真だけ（飾り。読み上げない）。たたんだ行で「どの服か」をひと目で見せる */
+export function GarmentFace({ garment }: { garment: Garment }) {
+  const url = usePhotoUrl(garment.photo);
+  return url ? (
+    <img className="garment-face" src={url} alt="" />
+  ) : (
+    <span className="garment-face" style={{ background: COLORS[garment.color].hex }} aria-hidden />
   );
 }
 
