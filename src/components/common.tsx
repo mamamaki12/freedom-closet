@@ -1,6 +1,7 @@
 import { HelpCircle } from "lucide-react";
-import { useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { COLORS, shortLabel } from "../domain/colors";
+import { nameParts } from "../domain/names";
 import type { ColorName, Garment } from "../domain/types";
 
 export function usePhotoUrl(photo: Blob | undefined): string | undefined {
@@ -12,6 +13,33 @@ export function usePhotoUrl(photo: Blob | undefined): string | undefined {
     return () => URL.revokeObjectURL(u);
   }, [photo]);
   return url;
+}
+
+/**
+ * 横にずらせる列の、左右にまだ続きがあるか。続きがある側の端を薄くして「まだある」と分かるようにする。
+ * 1つ目は列の要素に渡す ref（あとから画面に出る列でも動くよう、callback ref にしている）、
+ * 2つ目は className にそのまま足す文字（" more-left more-right" など）
+ */
+export function useScrollEdges(): [(el: HTMLElement | null) => void, string] {
+  const [el, setEl] = useState<HTMLElement | null>(null);
+  const [edges, setEdges] = useState("");
+  useEffect(() => {
+    if (!el) return;
+    const update = () => {
+      const left = el.scrollLeft > 2;
+      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+      setEdges(`${left ? " more-left" : ""}${right ? " more-right" : ""}`);
+    };
+    update();
+    el.addEventListener("scroll", update, { passive: true });
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", update);
+      ro.disconnect();
+    };
+  }, [el]);
+  return [setEl, edges];
 }
 
 export function GarmentThumb({
@@ -52,10 +80,28 @@ export function GarmentThumb({
       <span className="thumb-label">
         <ColorDot color={garment.color} />
         {garment.subColor && garment.subColor !== garment.color && <ColorDot color={garment.subColor} />}
-        {label}
+        <NameText name={label} />
       </span>
       {caption && <span className="thumb-caption">{caption}</span>}
     </Tag>
+  );
+}
+
+/**
+ * 服の名前。「デニムジャケット」のように分けられる長い名前は、言葉の切れ目（デニム／ジャケット）で2行まで折り返す。
+ * 分けられない名前は今までどおり1行で、入らなければ「…」
+ */
+export function NameText({ name }: { name: string }) {
+  const parts = nameParts(name);
+  return (
+    <span className={parts.length > 1 ? "thumb-name split" : "thumb-name"}>
+      {parts.map((p, i) => (
+        <Fragment key={i}>
+          {i > 0 && <wbr />}
+          {p}
+        </Fragment>
+      ))}
+    </span>
   );
 }
 

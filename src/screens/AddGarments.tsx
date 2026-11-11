@@ -159,8 +159,16 @@ export function AddGarments({
 
   return (
     <section className="panel">
-      <div className="row between">
-        <h2>服を追加</h2>
+      {/* 写真を選ぶ前の「もどる」は、服の詳細と同じく見出しの左に置く（下の右にぽつんと離れていた） */}
+      <div className="row between add-head">
+        <div className="row add-title">
+          {items.length === 0 && (
+            <button className="btn ghost icon-only" onClick={() => onDone(0)} aria-label="もどる" title="もどる">
+              <ArrowLeft size={22} aria-hidden />
+            </button>
+          )}
+          <h2>服を追加</h2>
+        </div>
         {items.length > 0 && (
           <button className={busy ? "btn" : "btn primary"} onClick={() => onDone(saved)} title={busy ? "ここでやめる" : "完了"}>
             {busy ? <X {...ICON} /> : <Check {...ICON} />}
@@ -174,12 +182,6 @@ export function AddGarments({
           <PhotoPickers onPick={addPhotos} />
           <p className="hint">写真を選ぶだけで、種類と色を判定して登録します。無地の壁や床の上に1着ずつ置いて撮ると当たりやすくなります。</p>
           {ai.setupNote?.() && <p className="hint">{ai.setupNote()}</p>}
-          <div className="actions">
-            <button className="btn ghost" onClick={() => onDone(0)} title="もどる">
-              <ArrowLeft {...ICON} />
-              <BtnText text="もどる" />
-            </button>
-          </div>
         </>
       ) : (
         <>

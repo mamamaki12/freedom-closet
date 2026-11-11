@@ -5,7 +5,7 @@
 // 「服を追加」は右下に固定した丸いボタン（スクロールしてもいつでも押せる）。
 import { Archive, Bell, ChevronDown, ChevronRight, Clock, Download, Eye, HelpCircle, Plus, Sparkles, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
-import { GarmentThumb } from "../components/common";
+import { GarmentThumb, useScrollEdges } from "../components/common";
 import { shortLabel } from "../domain/colors";
 import { BtnText, ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
@@ -54,6 +54,8 @@ export function ClosetScreen({
   // 説明文は、はじめて服が並んだ画面でだけ出す（この画面を開いている間は出したまま）
   const [showHint] = useState(() => !closetHintSeen());
   const noticeId = useId();
+  // 絞り込みのチップは横にずらす1行。続きがある側の端を薄くして、まだあると分かるようにする
+  const [chipsRef, chipEdges] = useScrollEdges();
   const hasGarments = garments.length > 0;
   useEffect(() => {
     if (hasGarments && showHint) markClosetHintSeen();
@@ -189,7 +191,7 @@ export function ClosetScreen({
         </div>
       )}
 
-      <div className="chips scroll" role="tablist" aria-label="絞り込み">
+      <div ref={chipsRef} className={`chips scroll${chipEdges}`} role="tablist" aria-label="絞り込み">
         {filters.map((f) => (
           <button
             key={f.id}
