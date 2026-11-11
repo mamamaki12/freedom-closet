@@ -26,6 +26,7 @@ export function OutfitLook({
         <Figure3D items={items} profile={profile} scan={bodyScan} />
         <figcaption>着たときのイメージ</figcaption>
       </figure>
+      {/* スマホ縦では、服を「小さな写真＋名前」の行で並べ、名前が途中で切れないようにする */}
       <div className="grid look-items">{children}</div>
     </div>
   );
