@@ -3,7 +3,14 @@ import { Download, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { errorMessage } from "../components/common";
 import { BtnText, ICON } from "../components/icons";
-import { clearRecords, listRecords, summarize, toCsv, type AnalysisRecord } from "../storage/analysisLog";
+import {
+  clearRecords,
+  listRecords,
+  summarize,
+  toCsv,
+  type AccuracySummary,
+  type AnalysisRecord,
+} from "../storage/analysisLog";
 
 const pct = (v: number) => `${Math.round(v * 100)}%`;
 
@@ -37,35 +44,7 @@ export function AccuracyPanel() {
       </p>
       {error && <p className="error">{error}</p>}
       {records && records.length === 0 && <p className="hint">まだ記録がありません。</p>}
-      {records && records.length > 0 && (
-        <table className="table">
-          <thead>
-            <tr>
-              <th>AI</th>
-              <th>件数</th>
-              <th>種類</th>
-              <th>名前</th>
-              <th>色</th>
-              <th>時間（中央値）</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summarize(records).map((s) => (
-              <tr key={s.provider}>
-                <td>{s.provider === "local" ? "端末内" : "Claude"}</td>
-                <td>
-                  {s.total}
-                  {s.failed > 0 && `（失敗${s.failed}）`}
-                </td>
-                <td>{pct(s.categoryRate)}</td>
-                <td>{pct(s.subTypeRate)}</td>
-                <td>{pct(s.colorRate)}</td>
-                <td>{(s.medianMs / 1000).toFixed(1)}秒</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+      {records && records.length > 0 && <SummaryTable records={records} />}
       <div className="actions" style={{ justifyContent: "flex-start" }}>
         <button className="btn" onClick={download} disabled={!records?.length} title="CSVで書き出す">
           <Download {...ICON} />
@@ -87,5 +66,41 @@ export function AccuracyPanel() {
         </button>
       </div>
     </fieldset>
+  );
+}
+
+// AIごとの列、項目ごとの行にする（AIは多くて2つなので、320px の画面でも横にはみ出さない）
+function SummaryTable({ records }: { records: AnalysisRecord[] }) {
+  const sums = summarize(records);
+  const rows: [string, (s: AccuracySummary) => string][] = [
+    ["件数", (s) => `${s.total}${s.failed > 0 ? `（失敗${s.failed}）` : ""}`],
+    ["種類", (s) => pct(s.categoryRate)],
+    ["名前", (s) => pct(s.subTypeRate)],
+    ["色", (s) => pct(s.colorRate)],
+    ["時間（中央値）", (s) => `${(s.medianMs / 1000).toFixed(1)}秒`],
+  ];
+  return (
+    <div className="table-wrap">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>AI</th>
+            {sums.map((s) => (
+              <th key={s.provider}>{s.provider === "local" ? "端末内" : "Claude"}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, value]) => (
+            <tr key={label}>
+              <th scope="row">{label}</th>
+              {sums.map((s) => (
+                <td key={s.provider}>{value(s)}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

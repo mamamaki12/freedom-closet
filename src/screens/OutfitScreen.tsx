@@ -271,56 +271,83 @@ export function OutfitScreen({
               : "条件に合う組み合わせが見つかりませんでした。使いたい服を外すか、気温を変えてみてください。"}
           </p>
         )}
-        {outfits?.map((o, i) => (
-          <article key={o.key} className="outfit">
-            <h3>
-              案{page * 3 + i + 1}：{o.title}
-            </h3>
-            <OutfitLook items={itemsOf(o)} profile={profile} bodyScan={bodyScan}>
-              {o.garmentIds.map((id) => {
-                const g = byId.get(id);
-                return g ? <GarmentThumb key={id} garment={g} size="sm" /> : null;
-              })}
-            </OutfitLook>
-            {/* よく使う操作は、説明より先（服の並びのすぐ下）に置き、1案目なら最初の画面で届くようにする */}
-            <div className="actions outfit-actions">
-              <button
-                className={`btn wear${todayWear?.outfitKey === o.key ? " on" : ""}`}
-                aria-pressed={todayWear?.outfitKey === o.key}
-                onClick={() => onWear(todayWear?.outfitKey === o.key ? null : o)}
-                title={todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"}
-              >
-                <CalendarCheck {...ICON} />
-                <BtnText text={todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"} short="今日" />
-              </button>
-              <span className="grow" />
-              <button
-                className={`btn icon-only like${ratings.get(o.key) === true ? " on" : ""}`}
-                aria-pressed={ratings.get(o.key) === true}
-                aria-label="好き"
-                title="好き"
-                onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: true, at: Date.now() })}
-              >
-                <Heart size={22} aria-hidden fill={ratings.get(o.key) === true ? "currentColor" : "none"} />
-              </button>
-              <button
-                className={`btn icon-only dislike${ratings.get(o.key) === false ? " on" : ""}`}
-                aria-pressed={ratings.get(o.key) === false}
-                aria-label="好みじゃない"
-                title="好みじゃない"
-                onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: false, at: Date.now() })}
-              >
-                <ThumbsDown size={22} aria-hidden fill={ratings.get(o.key) === false ? "currentColor" : "none"} />
-              </button>
-            </div>
-            <ul>
-              {o.explanation.map((line, j) => (
-                <li key={j}>{line}</li>
-              ))}
-            </ul>
-            <LookPhotos items={itemsOf(o)} profile={profile} />
-          </article>
-        ))}
+        {outfits?.map((o, i) =>
+          // 「好みじゃない」を押した案は1行にたたみ、押して何が変わるかを書く（取り消しもここから）
+          ratings.get(o.key) === false ? (
+            <article key={o.key} className="outfit outfit-folded">
+              <h3>
+                案{page * 3 + i + 1}：{o.title}
+              </h3>
+              <div className="feedback-note" role="status">
+                <ThumbsDown {...ICON} />
+                <span className="grow">好みじゃない案として覚えました。次からは出しません。</span>
+                <button
+                  className="btn small"
+                  onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: false, at: Date.now() })}
+                  title="好みじゃないを取り消す"
+                >
+                  <Undo2 {...ICON} />
+                  取り消す
+                </button>
+              </div>
+            </article>
+          ) : (
+            <article key={o.key} className="outfit">
+              <h3>
+                案{page * 3 + i + 1}：{o.title}
+              </h3>
+              <OutfitLook items={itemsOf(o)} profile={profile} bodyScan={bodyScan}>
+                {o.garmentIds.map((id) => {
+                  const g = byId.get(id);
+                  return g ? <GarmentThumb key={id} garment={g} size="sm" /> : null;
+                })}
+              </OutfitLook>
+              {/* よく使う操作は、説明より先（服の並びのすぐ下）に置き、1案目なら最初の画面で届くようにする */}
+              <div className="actions outfit-actions">
+                <button
+                  className={`btn wear${todayWear?.outfitKey === o.key ? " on" : ""}`}
+                  aria-pressed={todayWear?.outfitKey === o.key}
+                  onClick={() => onWear(todayWear?.outfitKey === o.key ? null : o)}
+                  title={todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"}
+                >
+                  <CalendarCheck {...ICON} />
+                  <BtnText text={todayWear?.outfitKey === o.key ? "今日はこれにした" : "今日はこれ"} short="今日" />
+                </button>
+                <span className="grow" />
+                <button
+                  className={`btn icon-only like${ratings.get(o.key) === true ? " on" : ""}`}
+                  aria-pressed={ratings.get(o.key) === true}
+                  aria-label="好き"
+                  title="好き"
+                  onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: true, at: Date.now() })}
+                >
+                  <Heart size={22} aria-hidden fill={ratings.get(o.key) === true ? "currentColor" : "none"} />
+                </button>
+                <button
+                  className={`btn icon-only dislike${ratings.get(o.key) === false ? " on" : ""}`}
+                  aria-pressed={ratings.get(o.key) === false}
+                  aria-label="好みじゃない"
+                  title="好みじゃない"
+                  onClick={() => onFeedback({ outfitKey: o.key, garmentIds: o.garmentIds, liked: false, at: Date.now() })}
+                >
+                  <ThumbsDown size={22} aria-hidden fill={ratings.get(o.key) === false ? "currentColor" : "none"} />
+                </button>
+              </div>
+              {ratings.get(o.key) === true && (
+                <p className="feedback-note liked" role="status">
+                  <Heart {...ICON} />
+                  <span className="grow">好きな案として覚えました。この服の組み合わせを出しやすくします。</span>
+                </p>
+              )}
+              <ul>
+                {o.explanation.map((line, j) => (
+                  <li key={j}>{line}</li>
+                ))}
+              </ul>
+              <LookPhotos items={itemsOf(o)} profile={profile} />
+            </article>
+          ),
+        )}
       </div>
 
       {outfits && (outfits.length > 0 || page > 0) && (

@@ -449,6 +449,35 @@ button.thumb {
 .outfit .outfit-actions {
   margin-top: 8px;
 }
+/* 好き・好みじゃないを押したあとの1行（押すと何が変わるか） */
+.feedback-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 6px 6px 6px 10px;
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--muted-strong);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+.feedback-note svg {
+  flex: none;
+}
+.feedback-note .btn {
+  flex: none;
+}
+.feedback-note.liked svg {
+  color: #d6336c;
+}
+/* 「好みじゃない」でたたんだ案：見出しも控えめにする */
+.outfit-folded h3 {
+  color: var(--muted-strong);
+}
+.outfit-folded {
+  padding-bottom: 4px;
+}
 
 .radio {
   display: flex;
@@ -1355,6 +1384,15 @@ legend.with-icon {
   padding: 4px 6px;
   text-align: right;
   white-space: nowrap;
+}
+.table tbody th {
+  font-weight: normal;
+  color: var(--muted-strong);
+}
+/* もし列が増えても、画面ごとではなく表だけが横に動く */
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
 }
 .table th:first-child,
 .table td:first-child {
