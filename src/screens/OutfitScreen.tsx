@@ -282,13 +282,8 @@ export function OutfitScreen({
                 return g ? <GarmentThumb key={id} garment={g} size="sm" /> : null;
               })}
             </OutfitLook>
-            <ul>
-              {o.explanation.map((line, j) => (
-                <li key={j}>{line}</li>
-              ))}
-            </ul>
-            <LookPhotos items={itemsOf(o)} profile={profile} />
-            <div className="actions">
+            {/* よく使う操作は、説明より先（服の並びのすぐ下）に置き、1案目なら最初の画面で届くようにする */}
+            <div className="actions outfit-actions">
               <button
                 className={`btn wear${todayWear?.outfitKey === o.key ? " on" : ""}`}
                 aria-pressed={todayWear?.outfitKey === o.key}
@@ -318,6 +313,12 @@ export function OutfitScreen({
                 <ThumbsDown size={22} aria-hidden fill={ratings.get(o.key) === false ? "currentColor" : "none"} />
               </button>
             </div>
+            <ul>
+              {o.explanation.map((line, j) => (
+                <li key={j}>{line}</li>
+              ))}
+            </ul>
+            <LookPhotos items={itemsOf(o)} profile={profile} />
           </article>
         ))}
       </div>
@@ -359,14 +360,14 @@ function OutfitSkeletons() {
               <div className="sk sk-thumb" />
             </div>
           </div>
-          <div className="sk sk-line" />
-          <div className="sk sk-line short" />
           <div className="sk-actions">
             <div className="sk sk-btn" />
             <span className="grow" />
             <div className="sk sk-icon" />
             <div className="sk sk-icon" />
           </div>
+          <div className="sk sk-line" />
+          <div className="sk sk-line short" />
         </div>
       ))}
     </div>

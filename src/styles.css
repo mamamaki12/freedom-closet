@@ -442,6 +442,10 @@ button.thumb {
   padding-left: 1.2em;
   font-size: 0.9rem;
 }
+/* 「今日はこれ」・評価は服の並びのすぐ下（説明はその下） */
+.outfit .outfit-actions {
+  margin-top: 8px;
+}
 
 .radio {
   display: flex;
@@ -1466,5 +1470,13 @@ legend.with-icon {
   .fab {
     right: max(16px, calc((100vw - 80px - 720px) / 2 + 16px));
     bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  /* コーデの案：マネキンを細くして（高さ 約540px → 約280px）、「今日はこれ」・評価までのスクロールを短くする */
+  .look-figure,
+  .sk-figure {
+    flex-basis: 150px;
+  }
+  .grid.look-items {
+    grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   }
 }
