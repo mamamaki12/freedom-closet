@@ -1,5 +1,5 @@
 import { HelpCircle } from "lucide-react";
-import { Fragment, useEffect, useState, type ReactNode, type RefObject } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { COLORS, shortLabel } from "../domain/colors";
 import { nameParts } from "../domain/names";
 import type { ColorName, Garment } from "../domain/types";
@@ -17,12 +17,13 @@ export function usePhotoUrl(photo: Blob | undefined): string | undefined {
 
 /**
  * 横にずらせる列の、左右にまだ続きがあるか。続きがある側の端を薄くして「まだある」と分かるようにする。
- * 返す文字は className にそのまま足す（" more-left more-right" など）
+ * 1つ目は列の要素に渡す ref（あとから画面に出る列でも動くよう、callback ref にしている）、
+ * 2つ目は className にそのまま足す文字（" more-left more-right" など）
  */
-export function useScrollEdges(ref: RefObject<HTMLElement | null>): string {
+export function useScrollEdges(): [(el: HTMLElement | null) => void, string] {
+  const [el, setEl] = useState<HTMLElement | null>(null);
   const [edges, setEdges] = useState("");
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const update = () => {
       const left = el.scrollLeft > 2;
@@ -37,8 +38,8 @@ export function useScrollEdges(ref: RefObject<HTMLElement | null>): string {
       el.removeEventListener("scroll", update);
       ro.disconnect();
     };
-  }, [ref]);
-  return edges;
+  }, [el]);
+  return [setEl, edges];
 }
 
 export function GarmentThumb({

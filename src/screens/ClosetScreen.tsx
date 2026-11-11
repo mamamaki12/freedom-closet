@@ -4,7 +4,7 @@
 // スマホの最初の画面で服が見えるよう、お知らせは1行にたたみ、説明文は一度見たら出さない。
 // 「服を追加」は右下に固定した丸いボタン（スクロールしてもいつでも押せる）。
 import { Archive, Bell, ChevronDown, ChevronRight, Clock, Download, Eye, HelpCircle, Plus, Sparkles, X } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { GarmentThumb, useScrollEdges } from "../components/common";
 import { shortLabel } from "../domain/colors";
 import { BtnText, ICON } from "../components/icons";
@@ -55,8 +55,7 @@ export function ClosetScreen({
   const [showHint] = useState(() => !closetHintSeen());
   const noticeId = useId();
   // 絞り込みのチップは横にずらす1行。続きがある側の端を薄くして、まだあると分かるようにする
-  const chipsRef = useRef<HTMLDivElement>(null);
-  const chipEdges = useScrollEdges(chipsRef);
+  const [chipsRef, chipEdges] = useScrollEdges();
   const hasGarments = garments.length > 0;
   useEffect(() => {
     if (hasGarments && showHint) markClosetHintSeen();
