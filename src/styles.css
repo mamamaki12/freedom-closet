@@ -666,9 +666,7 @@ ul.more-body li + li {
 .pickers.stacked .picker.album .picker-icon {
   color: var(--muted);
 }
-.pickers.stacked .picker.album small {
-  margin-left: auto;
-}
+/* 補足（まとめて選べます）は右端に離さず、文字のすぐ後ろに置いて、ひとつのボタンに見えるようにする */
 .pickers.compact .picker {
   min-height: 0;
   flex-direction: row;
@@ -1895,4 +1893,31 @@ p[role="status"]:empty {
 .chips.scroll.more-left.more-right {
   -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
   mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent);
+}
+
+/* --- コーデの条件：とても狭い画面（320幅など）では2列のマス目。5つ目は1行を使う --- */
+@media (max-width: 359px) {
+  .cond-chips {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .cond-chips .chip {
+    justify-content: center;
+    padding: 4px 8px;
+    font-size: 0.8rem;
+    min-width: 0;
+  }
+  .cond-chips .chip:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+}
+
+/* --- 分けられない長めの名前（カーディガン など6文字以上）：文字を少し小さくし、左右の余白を詰めて、3列の一覧でも切れないようにする --- */
+.thumb-name.long {
+  font-size: 0.68rem;
+}
+.thumb-label:has(.thumb-name.long) {
+  padding-left: 4px;
+  padding-right: 4px;
+  gap: 3px;
 }

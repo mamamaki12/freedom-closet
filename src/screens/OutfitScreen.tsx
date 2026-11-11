@@ -170,7 +170,7 @@ export function OutfitScreen({
 
       {/* 体感・目的のチップは折り返して全部見せる（横にずらす1行だと右端で切れて見えなかった） */}
       <div className="conditions" id={condId} hidden={!condOpen}>
-        <div className="chips" role="group" aria-label="体感の気温">
+        <div className="chips cond-chips" role="group" aria-label="体感の気温">
           {FEELS.map((f) => (
             <button key={f.id} type="button" className={`chip${feel === f.id ? " on" : ""}`} aria-pressed={feel === f.id} onClick={() => chooseFeel(f.id)}>
               <Icon of={FEEL_ICONS[f.id]} />
@@ -179,7 +179,7 @@ export function OutfitScreen({
           ))}
         </div>
         <WeatherButton onTemperature={(c) => chooseFeel(feelForTemperature(c))} />
-        <div className="chips" role="group" aria-label="出かける目的">
+        <div className="chips cond-chips" role="group" aria-label="出かける目的">
           {PURPOSES.map((p) => (
             <button key={p} type="button" className={`chip${purpose === p ? " on" : ""}`} aria-pressed={purpose === p} onClick={() => choosePurpose(p)}>
               <Icon of={PURPOSE_ICONS[p]} />

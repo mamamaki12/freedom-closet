@@ -6,6 +6,8 @@ describe("nameParts", () => {
     expect(nameParts("デニムジャケット")).toEqual(["デニム", "ジャケット"]);
     expect(nameParts("スウェットパンツ")).toEqual(["スウェット", "パンツ"]);
     expect(nameParts("花柄シャツ")).toEqual(["花柄", "シャツ"]);
+    expect(nameParts("タートルネック")).toEqual(["タートル", "ネック"]);
+    expect(nameParts("マウンテンパーカ")).toEqual(["マウンテン", "パーカ"]);
   });
   it("短い名前や、分けられない名前はそのまま", () => {
     expect(nameParts("シャツ")).toEqual(["シャツ"]);
