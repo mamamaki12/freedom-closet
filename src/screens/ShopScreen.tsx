@@ -127,9 +127,12 @@ export function ShopScreen({
         const curated = findCurated(s);
         return (
           <article key={`${s.category}-${s.subType}-${s.color}`} className="outfit">
-            <h3>
-              <ColorDot color={s.color} />
-              {colorLabel(s.color)}の{s.subType}
+            {/* 名前は途中で割らず、入らなければ札（アウター など）だけ次の行へ送る */}
+            <h3 className="shop-title">
+              <span className="shop-name">
+                <ColorDot color={s.color} />
+                {colorLabel(s.color)}の{s.subType}
+              </span>
               <span className="tag">{CATEGORY_LABELS[s.category]}</span>
             </h3>
             <p>{s.reason}</p>

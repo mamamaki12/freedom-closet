@@ -1778,3 +1778,56 @@ p[role="status"]:empty {
   margin-left: 4px;
   white-space: nowrap;
 }
+
+/* --- コーデの案の服：スマホ縦では「小さな写真＋名前」の行にして、名前を切らずに出す（PC・横向きはタイルのまま） --- */
+@media (max-width: 640px) {
+  .grid.look-items {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .look-items .thumb {
+    flex-direction: row;
+    align-items: center;
+  }
+  .look-items .thumb img {
+    width: 52px;
+    flex: none;
+  }
+  .look-items .thumb-label {
+    flex: 1;
+    min-width: 0;
+    font-size: 0.8rem;
+  }
+}
+
+/* --- 買い足しの見出し：名前はひとまとまり。入らないときは札だけ次の行へ --- */
+.shop-title {
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 4px;
+}
+.shop-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.shop-title .tag {
+  margin-left: 0;
+}
+/* とても狭い画面（320幅など）：マネキンを少し細く、写真を小さくして、名前の幅を空ける */
+@media (max-width: 359px) {
+  .look-figure {
+    flex-basis: 40%;
+  }
+  .look-items .thumb img {
+    width: 40px;
+  }
+  .look-items .thumb-label {
+    font-size: 0.75rem;
+  }
+  /* 「着たときのイメージ」が1文字だけ次の行に落ちないように */
+  .look-figure figcaption {
+    font-size: 0.65rem;
+    white-space: nowrap;
+  }
+}
