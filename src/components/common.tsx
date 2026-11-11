@@ -89,12 +89,12 @@ export function GarmentThumb({
 
 /**
  * 服の名前。「デニムジャケット」のように分けられる長い名前は、言葉の切れ目（デニム／ジャケット）で2行まで折り返す。
- * 分けられない名前は今までどおり1行で、入らなければ「…」
+ * 分けられない6文字以上の名前（カーディガン など）は、少し小さい文字で1行に収める。入らなければ「…」
  */
 export function NameText({ name }: { name: string }) {
   const parts = nameParts(name);
   return (
-    <span className={parts.length > 1 ? "thumb-name split" : "thumb-name"}>
+    <span className={parts.length > 1 ? "thumb-name split" : name.length >= 6 ? "thumb-name long" : "thumb-name"}>
       {parts.map((p, i) => (
         <Fragment key={i}>
           {i > 0 && <wbr />}
