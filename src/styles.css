@@ -355,10 +355,6 @@ select.text {
   display: block;
   background: var(--line);
 }
-.garment-chip.rest {
-  padding-left: 10px;
-  color: var(--muted-strong);
-}
 .thumb {
   font: inherit;
   color: inherit;
@@ -771,26 +767,43 @@ ul.more-body li + li {
   padding: 4px 9px;
 }
 
-.size-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
+/* いつものサイズ：見出しを上に、チップは同じ幅のマス目で折り返す（右端で切れず、上下の列がそろう） */
 .size-row + .size-row {
-  margin-top: 8px;
-}
-.size-row .chips.scroll {
-  margin: 0 -16px 0 0;
-  padding: 0 16px 0 0;
-  flex: 1;
-  min-width: 0;
+  margin-top: 12px;
 }
 .size-row-label {
-  flex: none;
+  display: block;
+  margin-bottom: 6px;
   font-size: 0.8rem;
   color: var(--muted);
-  min-width: 4.5em;
+}
+/* 服（XS〜XXL の6つ）は6マス1行、狭い画面では3マス×2行。靴（14）はスマホで5マス、広い画面で7マス×2行。1マスは 44px 以上 */
+.size-grid {
+  display: grid;
+  gap: 8px;
+}
+.size-grid.clothing {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+.size-grid.shoes {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+@media (max-width: 369px) {
+  .size-grid.clothing {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (min-width: 641px) {
+  .size-grid {
+    max-width: 440px;
+  }
+  .size-grid.shoes {
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+  }
+}
+.size-grid .chip {
+  justify-content: center;
+  padding: 4px 0;
 }
 .size-hint {
   margin: 0 0 8px;
@@ -1642,6 +1655,12 @@ p[role="status"]:empty {
   width: 100%;
   justify-content: center;
 }
+/* 一度も着ていない服の「登録から4か月」「記録なし」は2行で出す */
+.thumb-caption .caption-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* PC では「この服でコーデ」と文字で出すので、1行に収まる幅にする */
 @media (min-width: 641px) and (pointer: fine) {
   .grid.idle-grid {
@@ -1650,4 +1669,57 @@ p[role="status"]:empty {
   .idle-card .btn {
     white-space: nowrap;
   }
+}
+
+/* --- 買い足し：「手持ち6着と合わせられる」の1行。押すと服の名前を全部見せる --- */
+.matches {
+  margin-top: 4px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+.matches > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.matches > summary::-webkit-details-marker {
+  display: none;
+}
+.matches-chevron {
+  flex: none;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.matches[open] .matches-chevron {
+  transform: rotate(180deg);
+}
+.matches .garment-chips {
+  padding: 0 10px 10px;
+}
+.matches .garment-chip {
+  background: var(--panel);
+}
+/* 小さな写真を少し重ねて並べる */
+.garment-faces {
+  display: inline-flex;
+  flex: none;
+}
+.garment-face {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  object-fit: cover;
+  display: block;
+  border: 2px solid var(--bg);
+  box-sizing: content-box;
+  background: var(--line);
+}
+.garment-face + .garment-face {
+  margin-left: -8px;
 }

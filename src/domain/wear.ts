@@ -62,6 +62,15 @@ export function daysAgoLabel(day: string, now = new Date()): string {
   return "1年以上前";
 }
 
+/** 「4か月」「12日」のような、登録からの長さ（一度も着ていない服に添える） */
+export function sinceAddedLabel(createdAt: number, now = new Date()): string {
+  const diff = Math.floor((now.getTime() - createdAt) / 86_400_000);
+  if (diff < 1) return "登録したばかり";
+  if (diff < 30) return `登録から${diff}日`;
+  if (diff < 365) return `登録から${Math.floor(diff / 30)}か月`;
+  return "登録から1年以上";
+}
+
 /** 「3日前に着た」のような言い方（一覧の写真の下と、服の詳細で使う） */
 export function wornLabel(day: string, now = new Date()): string {
   return `${daysAgoLabel(day, now)}に着た`;

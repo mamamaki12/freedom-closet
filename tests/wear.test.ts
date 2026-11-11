@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Garment } from "../src/domain/types";
-import { dayKey, daysAgoLabel, idleGarments, lastWornMap, recentWears, wearSummaryLine } from "../src/domain/wear";
+import { dayKey, daysAgoLabel, idleGarments, lastWornMap, recentWears, sinceAddedLabel, wearSummaryLine } from "../src/domain/wear";
 
 const now = new Date("2026-10-30T10:00:00");
 const garment = (id: string, createdDaysAgo: number): Garment =>
@@ -45,6 +45,13 @@ describe("着た記録", () => {
       { day: "2026-10-29", garmentIds: ["worn-recently"], at: 0 },
     ];
     expect(idleGarments(garments, wears, now).map((g) => g.id)).toEqual(["never-90", "never-40", "worn-120", "worn-60"]);
+  });
+  it("sinceAddedLabel は登録からの長さ", () => {
+    const ago = (d: number) => now.getTime() - d * 86_400_000;
+    expect(sinceAddedLabel(ago(0), now)).toBe("登録したばかり");
+    expect(sinceAddedLabel(ago(12), now)).toBe("登録から12日");
+    expect(sinceAddedLabel(ago(125), now)).toBe("登録から4か月");
+    expect(sinceAddedLabel(ago(400), now)).toBe("登録から1年以上");
   });
   it("daysAgoLabel", () => {
     expect(daysAgoLabel("2026-10-30", now)).toBe("今日");

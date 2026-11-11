@@ -9,7 +9,7 @@ import { GarmentThumb } from "../components/common";
 import { shortLabel } from "../domain/colors";
 import { BtnText, ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
-import { idleGarments, lastWornMap, wornLabel } from "../domain/wear";
+import { idleGarments, lastWornMap, sinceAddedLabel, wornLabel } from "../domain/wear";
 import type { BackupReminder } from "../storage/backupReminder";
 import { closedNoticeKey, closetHintSeen, markClosetHintSeen, saveClosedNoticeKey } from "../storage/closetHints";
 import { PhotoPickers } from "./AddGarments";
@@ -102,9 +102,17 @@ export function ClosetScreen({
   const SummaryIcon = notices.length > 1 ? Bell : notices[0] === "backup" ? Archive : HelpCircle;
   const tapHint = "服をタップすると、直したり、その服でコーデを見たりできます。";
 
+  // 一度も着ていない服は、登録からの長さも出す（並びの理由が分かるように）。「登録から4か月」「記録なし」の2行
   const caption = (g: Garment) => {
     const day = lastWorn.get(g.id);
-    return day ? wornLabel(day) : wears.length > 0 ? "まだ記録なし" : undefined;
+    if (day) return wornLabel(day);
+    return (
+      <>
+        <span className="caption-line">{sinceAddedLabel(g.createdAt)}</span>
+        <span className="sr-only">、</span>
+        <span className="caption-line">記録なし</span>
+      </>
+    );
   };
 
   return (

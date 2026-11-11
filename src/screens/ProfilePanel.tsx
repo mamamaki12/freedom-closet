@@ -87,11 +87,14 @@ export function ProfilePanel({ profile, onChange }: { profile: Profile; onChange
         ))}
       </div>
 
-      <p className="hint">いつものサイズ（服を登録するとき自動で入ります）</p>
+      <p className="hint">いつものサイズ（登録する服に自動で入ります）</p>
+      {/* 見出しを上に置き、チップは同じ幅のマス目に並べる（はみ出さず、上下の列もそろう） */}
       {(["tops", "bottoms", "shoes"] as SizeGroup[]).map((group) => (
-        <div key={group} className="size-row">
-          <span className="size-row-label">{SIZE_GROUP_LABELS[group]}</span>
-          <div className="chips scroll">
+        <div key={group} className="size-row" role="group" aria-labelledby={`size-${group}`}>
+          <span className="size-row-label" id={`size-${group}`}>
+            {SIZE_GROUP_LABELS[group]}
+          </span>
+          <div className={`size-grid ${group === "shoes" ? "shoes" : "clothing"}`}>
             {(group === "shoes" ? SHOE_SIZES : CLOTHING_SIZES).map((s) => (
               <button
                 key={s}
