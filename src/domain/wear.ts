@@ -29,16 +29,27 @@ export const IDLE_DAYS = 30;
 /**
  * しばらく着ていない服。記録が一度もない服は、登録から IDLE_DAYS 以上たっていれば入れる。
  * 着た記録を付け始めたばかりの人に全部が並ばないよう、記録が1件もなければ空にする。
+ * 並びは、着ていない期間の長い順：一度も着ていない服（登録の古い順）→ 最後に着た日の古い順。
  */
 export function idleGarments(garments: Garment[], wears: WearRecord[], now = new Date()): Garment[] {
   if (wears.length === 0) return [];
   const last = lastWornMap(wears);
   const limit = now.getTime() - IDLE_DAYS * 86_400_000;
-  return garments.filter((g) => {
+  const wornAt = (g: Garment) => {
     const day = last.get(g.id);
-    if (day) return new Date(`${day}T12:00:00`).getTime() < limit;
-    return g.createdAt < limit;
-  });
+    return day ? new Date(`${day}T12:00:00`).getTime() : undefined;
+  };
+  return garments
+    .filter((g) => (wornAt(g) ?? g.createdAt) < limit)
+    .sort((a, b) => {
+      const wa = wornAt(a), wb = wornAt(b);
+      if (wa === undefined || wb === undefined) {
+        if (wa !== undefined) return 1;
+        if (wb !== undefined) return -1;
+        return a.createdAt - b.createdAt;
+      }
+      return wa - wb;
+    });
 }
 
 /** 「3日前」「今日」のような言い方 */

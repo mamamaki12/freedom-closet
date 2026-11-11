@@ -50,6 +50,8 @@ export function App() {
   /** 体の写真から作った体型（数字だけ）。外には送らない */
   const [bodyScan, setBodyScan] = useState<BodyScan | undefined>(loadBodyScan);
   const [notice, setNotice] = useState<string>();
+  /** いま登録した服の id。クローゼットの一番上にまとめて見せ、ほかのタブへ移ったら忘れる */
+  const [justAdded, setJustAdded] = useState<string[]>([]);
   /** 消した服を元に戻せるよう、少しの間だけ覚えておく */
   const [undo, setUndo] = useState<{ garment: Garment; label: string }>();
   const [lastBackupAt, setLastBackupAt] = useState(loadLastBackup);
@@ -106,6 +108,22 @@ export function App() {
     }
   };
 
+  // 「この服でコーデ」：その服を「使いたい服」に入れてコーデ画面を開く
+  const styleWithGarment = (g: Garment) => {
+    setStyleWith((cur) => ({ ids: [g.id], n: cur.n + 1 }));
+    moveTab("outfit");
+  };
+
+  // 下のタブなどで画面を移ったら、上のお知らせの帯は消す（コーデ画面の上に「登録しました」が残らないように）。
+  // クローゼットから離れたら、「いま登録した服」のまとめも消す
+  const moveTab = (t: Tab) => {
+    if (t === tab && !sheet) return;
+    setSheet(null);
+    setTab(t);
+    setNotice(undefined);
+    if (t !== "closet") setJustAdded([]);
+  };
+
   // 「今日はこれ」。1日1件で、同じ日にもう一度押したら上書き、null なら取り消し
   const wearToday = async (o: Outfit | null) => {
     const day = dayKey(new Date());
@@ -140,6 +158,7 @@ export function App() {
             initialFiles={sheet.files}
             onSave={async (g, analysis) => {
               await db.saveGarment(g);
+              setJustAdded((cur) => [...cur, g.id]);
               // 服が入ったら、ブラウザに長期保存をもう一度お願いする（使い始めてからのほうが認められやすい）
               void requestPersistentStorage();
               if (analysis) {
@@ -161,10 +180,10 @@ export function App() {
               await reload();
             }}
             onEdit={(garment) => setSheet({ kind: "edit", garment })}
-            onDone={(saved) => {
+            onDone={() => {
+              // 登録した服は、クローゼットの一番上の「いま登録した服」で見せる（帯は出さない）
               setSheet(null);
               setTab("closet");
-              if (saved > 0) setNotice(`${saved}着を登録しました`);
             }}
           />
         ) : sheet?.kind === "edit" ? (
@@ -187,11 +206,7 @@ export function App() {
               setSheet(null);
               setUndo({ garment: deleted, label: shortLabel(deleted) });
             }}
-            onStyle={() => {
-              setStyleWith((cur) => ({ ids: [sheet.garment.id], n: cur.n + 1 }));
-              setSheet(null);
-              setTab("outfit");
-            }}
+            onStyle={() => styleWithGarment(sheet.garment)}
           />
         ) : sheet?.kind === "body-scan" ? (
           <BodyScanScreen
@@ -207,8 +222,14 @@ export function App() {
           <ClosetScreen
             garments={garments}
             wears={wears}
-            onAdd={(files) => setSheet({ kind: "add", files })}
+            onAdd={(files) => {
+              setJustAdded([]);
+              setSheet({ kind: "add", files });
+            }}
             onEdit={(garment) => setSheet({ kind: "edit", garment })}
+            onStyle={styleWithGarment}
+            justAdded={justAdded}
+            onClearJustAdded={() => setJustAdded([])}
             setupNote={ai.setupNote?.()}
             backupReminder={reminder}
             onBackupNow={backupNow}
@@ -221,7 +242,7 @@ export function App() {
             profile={profile}
             bodyScan={bodyScan}
             initialMustInclude={styleWith.ids}
-            onGoCloset={() => setTab("closet")}
+            onGoCloset={() => moveTab("closet")}
             garments={garments}
             feedback={feedback}
             wears={wears}
@@ -235,7 +256,7 @@ export function App() {
             }}
           />
         ) : tab === "shop" ? (
-          <ShopScreen ai={ai} garments={garments} feedback={feedback} profile={profile} onGoSettings={() => setTab("settings")} />
+          <ShopScreen ai={ai} garments={garments} feedback={feedback} profile={profile} onGoSettings={() => moveTab("settings")} />
         ) : (
           <SettingsScreen
             profile={profile}
@@ -310,10 +331,7 @@ export function App() {
             key={t.id}
             className={tab === t.id && !sheet ? "on" : ""}
             aria-current={tab === t.id && !sheet ? "page" : undefined}
-            onClick={() => {
-              setSheet(null);
-              setTab(t.id);
-            }}
+            onClick={() => moveTab(t.id)}
           >
             <t.icon size={24} strokeWidth={tab === t.id && !sheet ? 2.2 : 1.8} aria-hidden />
             <span>{t.label}</span>
