@@ -20,6 +20,7 @@ export function GarmentThumb({
   onClick,
   size = "md",
   caption,
+  isNew,
 }: {
   garment: Garment;
   selected?: boolean;
@@ -27,6 +28,8 @@ export function GarmentThumb({
   size?: "sm" | "md";
   /** 名前の下に小さく出す補足（「3日前」など） */
   caption?: string;
+  /** いま登録したばかりの服に「新しい」の印を付ける */
+  isNew?: boolean;
 }) {
   const url = usePhotoUrl(garment.photo);
   const Tag = onClick ? "button" : "div";
@@ -45,6 +48,7 @@ export function GarmentThumb({
           確認
         </span>
       )}
+      {isNew && size === "md" && <span className="thumb-badge new">新しい</span>}
       <span className="thumb-label">
         <ColorDot color={garment.color} />
         {garment.subColor && garment.subColor !== garment.color && <ColorDot color={garment.subColor} />}

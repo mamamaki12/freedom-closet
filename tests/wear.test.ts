@@ -31,6 +31,21 @@ describe("着た記録", () => {
     ];
     expect(idleGarments(garments, wears, now).map((g) => g.id)).toEqual(["old", "worn-long-ago"]);
   });
+  it("しばらく着ていない服は、着ていない期間の長い順（記録なし→最後に着た日の古い順）", () => {
+    const garments = [
+      garment("worn-60", 200),
+      garment("never-40", 40),
+      garment("worn-120", 200),
+      garment("never-90", 90),
+      garment("worn-recently", 200),
+    ];
+    const wears = [
+      { day: "2026-08-31", garmentIds: ["worn-60"], at: 0 },
+      { day: "2026-07-02", garmentIds: ["worn-120"], at: 0 },
+      { day: "2026-10-29", garmentIds: ["worn-recently"], at: 0 },
+    ];
+    expect(idleGarments(garments, wears, now).map((g) => g.id)).toEqual(["never-90", "never-40", "worn-120", "worn-60"]);
+  });
   it("daysAgoLabel", () => {
     expect(daysAgoLabel("2026-10-30", now)).toBe("今日");
     expect(daysAgoLabel("2026-10-29", now)).toBe("昨日");

@@ -1,9 +1,12 @@
 // クローゼット。種類ごとに並べる。上の絞り込みで「確認したい服」「しばらく着ていない服」だけも見られる。
+// 服を登録した直後は、足した服を一番上にまとめ、種類ごとの並びでも「新しい」の印を付ける。
+// 「しばらく着てない」は着ていない期間の長い順に並べ、1回のタップでその服のコーデへ進める。
 // スマホの最初の画面で服が見えるよう、お知らせは1行にたたみ、説明文は一度見たら出さない。
 // 「服を追加」は右下に固定した丸いボタン（スクロールしてもいつでも押せる）。
-import { Archive, Bell, ChevronDown, ChevronRight, Clock, Download, Eye, HelpCircle, Plus, X } from "lucide-react";
+import { Archive, Bell, ChevronDown, ChevronRight, Clock, Download, Eye, HelpCircle, Plus, Sparkles, X } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { GarmentThumb } from "../components/common";
+import { shortLabel } from "../domain/colors";
 import { BtnText, ICON } from "../components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category, type Garment, type WearRecord } from "../domain/types";
 import { idleGarments, lastWornMap, wornLabel } from "../domain/wear";
@@ -19,6 +22,9 @@ export function ClosetScreen({
   wears,
   onAdd,
   onEdit,
+  onStyle,
+  justAdded = [],
+  onClearJustAdded,
   setupNote,
   backupReminder,
   onBackupNow,
@@ -29,6 +35,12 @@ export function ClosetScreen({
   /** 写真を選んでから開くときは files が入る */
   onAdd: (files?: File[]) => void;
   onEdit: (g: Garment) => void;
+  /** この服を使ったコーデを見る */
+  onStyle?: (g: Garment) => void;
+  /** いま登録したばかりの服の id（登録した順） */
+  justAdded?: string[];
+  /** 「いま登録した服」のまとめを閉じる */
+  onClearJustAdded?: () => void;
   /** AIを使い始める前に知らせること（初回のダウンロードなど） */
   setupNote?: string;
   /** しばらくバックアップしていないときのお知らせ */
@@ -62,6 +74,10 @@ export function ClosetScreen({
   const review = garments.filter((g) => g.needsReview);
   const idle = idleGarments(garments, wears);
   const lastWorn = lastWornMap(wears);
+  const newIds = new Set(justAdded);
+  // 登録した順に並べる（消した服は除く）
+  const byId = new Map(garments.map((g) => [g.id, g]));
+  const added = justAdded.flatMap((id) => byId.get(id) ?? []);
   // 選んでいた絞り込みの服がなくなったら（確認し終えたなど）、全部に戻す
   const active: Filter = (filter === "review" && review.length === 0) || (filter === "idle" && idle.length === 0) ? "all" : filter;
 
@@ -184,6 +200,22 @@ export function ClosetScreen({
       {active === "all" ? (
         <>
           {showHint && <p className="hint">{tapHint}</p>}
+          {added.length > 0 && (
+            <div className="group just-added">
+              <div className="just-added-head">
+                <h3>いま登録した服（{added.length}）</h3>
+                <button type="button" className="icon-btn" onClick={onClearJustAdded} aria-label="まとめを閉じる" title="まとめを閉じる">
+                  <X {...ICON} />
+                </button>
+              </div>
+              {/* 小さめの写真で並べ、下の種類ごとの並びを押し下げすぎない */}
+              <div className="grid small">
+                {added.map((g) => (
+                  <GarmentThumb key={g.id} garment={g} onClick={() => onEdit(g)} />
+                ))}
+              </div>
+            </div>
+          )}
           {CATEGORIES.map((c) => {
             const items = garments.filter((g) => g.category === c);
             if (items.length === 0) return null;
@@ -194,7 +226,7 @@ export function ClosetScreen({
                 </h3>
                 <div className="grid">
                   {items.map((g) => (
-                    <GarmentThumb key={g.id} garment={g} onClick={() => onEdit(g)} />
+                    <GarmentThumb key={g.id} garment={g} onClick={() => onEdit(g)} isNew={newIds.has(g.id)} />
                   ))}
                 </div>
               </div>
@@ -206,15 +238,31 @@ export function ClosetScreen({
           {active === "review" ? (
             <p className="hint">タップして開き、合っていればそのまま保存すると目印が消えます。</p>
           ) : active === "idle" ? (
-            <p className="hint">30日以上「今日はこれ」に入っていない服です。コーデ画面の「使いたい服」に入れると出番が作れます。</p>
+            <p className="hint">30日以上「今日はこれ」に入っていない服です（長く着ていない順）。「コーデ」で、その服を入れたコーデを出します。</p>
           ) : (
             showHint && <p className="hint">{tapHint}</p>
           )}
-          <div className="grid">
-            {(active === "review" ? review : active === "idle" ? idle : garments.filter((g) => g.category === active)).map((g) => (
-              <GarmentThumb key={g.id} garment={g} onClick={() => onEdit(g)} caption={active === "idle" ? caption(g) : undefined} />
-            ))}
-          </div>
+          {active === "idle" ? (
+            <div className="grid idle-grid">
+              {idle.map((g) => (
+                <div key={g.id} className="idle-card">
+                  <GarmentThumb garment={g} onClick={() => onEdit(g)} caption={caption(g)} />
+                  {onStyle && (
+                    <button type="button" className="btn small" onClick={() => onStyle(g)} title="この服でコーデ" aria-label={`${shortLabel(g)}でコーデ`}>
+                      <Sparkles {...ICON} />
+                      <BtnText text="この服でコーデ" short="コーデ" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="grid">
+              {(active === "review" ? review : garments.filter((g) => g.category === active)).map((g) => (
+                <GarmentThumb key={g.id} garment={g} onClick={() => onEdit(g)} isNew={newIds.has(g.id)} />
+              ))}
+            </div>
+          )}
         </>
       )}
 

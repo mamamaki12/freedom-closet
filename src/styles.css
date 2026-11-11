@@ -1603,3 +1603,51 @@ legend.with-icon {
 p[role="status"]:empty {
   margin: 0;
 }
+
+/* --- 服を登録した直後：足した服を一番上にまとめ、種類ごとの並びでは「新しい」の印を付ける --- */
+.thumb-badge.new {
+  left: auto;
+  right: 6px;
+  background: var(--accent);
+  color: var(--accent-text);
+}
+.just-added {
+  padding: 0 10px 10px;
+  margin: 12px 0 4px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+}
+.just-added-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  /* 閉じるボタン（44px）の下も 8px あける */
+  margin: 2px -6px 8px 0;
+}
+.just-added-head h3 {
+  margin: 0;
+}
+
+/* --- しばらく着ていない服：写真の下に「この服でコーデ」 --- */
+.idle-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.idle-card .thumb {
+  flex: 1;
+}
+.idle-card .btn {
+  width: 100%;
+  justify-content: center;
+}
+/* PC では「この服でコーデ」と文字で出すので、1行に収まる幅にする */
+@media (min-width: 641px) and (pointer: fine) {
+  .grid.idle-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .idle-card .btn {
+    white-space: nowrap;
+  }
+}
