@@ -1891,6 +1891,10 @@ p[role="status"]:empty {
   .closet-notice-detail {
     max-width: 100%;
   }
+  /* 2行になるとき「う」だけが次の行に残らないよう、行の長さをそろえる */
+  .closet-notice-title {
+    text-wrap: balance;
+  }
   .closet-notice-detail {
     white-space: nowrap;
   }
@@ -1941,8 +1945,13 @@ p[role="status"]:empty {
 .cond-chips .weather {
   display: contents;
 }
+/* 押すと気温を調べる操作なので、選ぶチップ（寒い〜暑い）と見分けられるよう、点線の枠と緑の文字にする */
 .cond-chips .weather > .btn {
   border-radius: 999px;
+  border-style: dashed;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
 }
 /* 取ってきた気温の文や、うまく取れなかったときの文は、次の行にまるごと出す */
 .cond-chips .weather > .hint,
@@ -1950,4 +1959,70 @@ p[role="status"]:empty {
   flex-basis: 100%;
   grid-column: 1 / -1;
   margin: 0;
+}
+
+/* --- コーデの案の見出し：「案1」と色の並びだけ（服の名前はすぐ下に並ぶ） --- */
+.outfit-heading {
+  flex-wrap: wrap;
+  column-gap: 12px;
+  row-gap: 2px;
+}
+.outfit-no {
+  flex: none;
+}
+.outfit-colors {
+  display: inline-flex;
+  flex-wrap: wrap;
+  column-gap: 10px;
+  row-gap: 2px;
+  font-size: 0.85rem;
+  font-weight: normal;
+  color: var(--muted-strong);
+}
+.outfit-color {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+/* --- たたんだ行（買い足しの「条件を変える」・コーデの「こだわり」）：コーデの「今：…」と同じ灰色の囲みにそろえる --- */
+.more.fold {
+  border-top: 0;
+  padding-top: 0;
+}
+.more.fold > summary {
+  list-style: none;
+  padding: 0 12px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  -webkit-tap-highlight-color: transparent;
+}
+/* 狭い画面で「こだわり」が「こだわ／り」と折れないよう、名前は1行のまま、例の文の方を「…」で切る */
+.fold-label {
+  flex: none;
+  white-space: nowrap;
+}
+.more.fold > summary .hint {
+  min-width: 0;
+}
+/* 「こだわり」の入力と並ぶ「反映」が「反／映」と縦に折れないよう、ボタンは縮めず入力の方を縮める */
+.more-body.row > .text {
+  min-width: 0;
+}
+.more-body.row > .btn {
+  flex: none;
+  white-space: nowrap;
+}
+.more.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold-chevron {
+  margin-left: auto;
+  color: var(--muted);
+  transition: transform 0.15s;
+}
+.more.fold[open] .fold-chevron {
+  transform: rotate(90deg);
 }

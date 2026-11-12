@@ -2,7 +2,8 @@
 import { CalendarCheck, Check, ChevronDown, ChevronRight, Heart, Plus, RefreshCw, Shirt, SlidersHorizontal, ThumbsDown, Undo2, X } from "lucide-react";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
-import { errorMessage, GarmentThumb } from "../components/common";
+import { ColorDot, errorMessage, GarmentThumb } from "../components/common";
+import { colorLabel } from "../domain/colors";
 import type { BodyScan } from "../body/types";
 import type { Profile } from "../domain/profile";
 import { BtnText, FEEL_ICONS, ICON, Icon, PURPOSE_ICONS } from "../components/icons";
@@ -225,10 +226,11 @@ export function OutfitScreen({
           </>
         )}
 
-        <details className="more">
+        <details className="more fold">
           <summary>
             <SlidersHorizontal {...ICON} />
-            こだわり <span className="hint">{preference || "例：明るめ、楽な服"}</span>
+            <span className="fold-label">こだわり</span> <span className="hint">{preference || "例：明るめ、楽な服"}</span>
+            <ChevronRight className="fold-chevron" {...ICON} />
           </summary>
           <form
             className="row more-body"
@@ -285,9 +287,7 @@ export function OutfitScreen({
           // 「好みじゃない」を押した案は1行にたたみ、押して何が変わるかを書く（取り消しもここから）
           ratings.get(o.key) === false ? (
             <article key={o.key} className="outfit outfit-folded">
-              <h3>
-                案{page * 3 + i + 1}：{o.title}
-              </h3>
+              <OutfitHeading n={page * 3 + i + 1} outfit={o} items={itemsOf(o)} />
               <div className="feedback-note" role="status">
                 <ThumbsDown {...ICON} />
                 <span className="grow">好みじゃない案として覚えました。次からは出しません。</span>
@@ -303,9 +303,7 @@ export function OutfitScreen({
             </article>
           ) : (
             <article key={o.key} className="outfit">
-              <h3>
-                案{page * 3 + i + 1}：{o.title}
-              </h3>
+              <OutfitHeading n={page * 3 + i + 1} outfit={o} items={itemsOf(o)} />
               <OutfitLook items={itemsOf(o)} profile={profile} bodyScan={bodyScan}>
                 {o.garmentIds.map((id) => {
                   const g = byId.get(id);
@@ -408,5 +406,26 @@ function OutfitSkeletons() {
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * 案の見出し。服の名前はすぐ下に並ぶので、見た目は「案1」と色の並び（●青 ●ネイビー ●茶）だけにして短くする。
+ * 読み上げでは今までどおり「案1：青のシャツ × ネイビーのデニム × …」と全部伝える
+ */
+function OutfitHeading({ n, outfit, items }: { n: number; outfit: Outfit; items: Garment[] }) {
+  return (
+    <h3 className="outfit-heading">
+      <span className="outfit-no">案{n}</span>
+      <span className="sr-only">：{outfit.title}</span>
+      <span className="outfit-colors" aria-hidden>
+        {items.map((g) => (
+          <span key={g.id} className="outfit-color">
+            <ColorDot color={g.color} />
+            {colorLabel(g.color)}
+          </span>
+        ))}
+      </span>
+    </h3>
   );
 }
