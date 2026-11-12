@@ -1,5 +1,5 @@
 // 服1着ぶんの入力欄。種類はタップで選ぶだけ、細かい項目は「詳しく」にしまっておく。
-import { SlidersHorizontal } from "lucide-react";
+import { ChevronRight, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
 import { ColorChips, ColorDot, usePhotoUrl } from "../components/common";
 import { ICON } from "../components/icons";
@@ -204,10 +204,12 @@ export function GarmentEditor({
         </div>
       </section>
 
-      <details className="more">
+      {/* たたんだ行は、コーデ・買い足しと同じ灰色の囲みにそろえる */}
+      <details className="more fold">
         <summary>
           <SlidersHorizontal {...ICON} />
-          詳しく <span className="hint">{detailSummary(value)}</span>
+          <span className="fold-label">詳しく</span> <span className="hint">{detailSummary(value)}</span>
+          <ChevronRight className="fold-chevron" {...ICON} />
         </summary>
         <div className="more-body">
           <div className="chips">

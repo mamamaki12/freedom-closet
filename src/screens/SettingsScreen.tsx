@@ -1,4 +1,4 @@
-import { Bot, Cloud, Scale, Smartphone } from "lucide-react";
+import { Bot, ChevronRight, Cloud, Scale, Smartphone } from "lucide-react";
 import type { ReactNode } from "react";
 import type { AISettings } from "../ai";
 import { ICON } from "../components/icons";
@@ -107,59 +107,76 @@ export function SettingsScreen({
 /** アプリに入れている素材のライセンス表記 */
 function Credits() {
   return (
-    <details className="more">
+    <details className="more fold">
       <summary>
         <Scale {...ICON} />
-        素材のライセンス
+        <span className="fold-label">素材のライセンス</span>
+        <ChevronRight className="fold-chevron" {...ICON} />
       </summary>
-      <ul className="hint more-body">
+      {/* リンクどうしが上下・左右でくっつかないよう、作品名・作者とライセンス・使い方を行に分ける */}
+      <ul className="hint more-body credits">
         <li>
-          3Dのマネキン：
-          <a href="https://github.com/makehumancommunity/makehuman" target="_blank" rel="noreferrer">
-            MakeHuman
-          </a>
-          （CC0 1.0）
+          <div>
+            3Dのマネキン：
+            <a href="https://github.com/makehumancommunity/makehuman" target="_blank" rel="noreferrer">
+              MakeHuman
+            </a>
+            （CC0 1.0）
+          </div>
         </li>
         <li>
-          靴の3Dの型：「
-          <a
-            href="https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Materials Variants Shoe
-          </a>
-          」© 2021 Shopify（
-          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
-            CC BY 4.0
-          </a>
-          ）。ロゴを消し、形と色を変えて使っています
+          <div>
+            靴の3Dの型：「
+            <a
+              href="https://github.com/KhronosGroup/glTF-Sample-Assets/tree/main/Models/MaterialsVariantsShoe"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Materials Variants Shoe
+            </a>
+            」
+          </div>
+          <div>
+            © 2021 Shopify（
+            <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+              CC BY 4.0
+            </a>
+            ）
+          </div>
+          <div>ロゴを消し、形と色を変えて使っています</div>
         </li>
         <li>
-          ブーツの3Dの型：「
-          <a
-            href="https://sketchfab.com/3d-models/photoscanned-female-ankle-boots-81ff219398e348b79497b0ccd98316b9"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Photoscanned Female Ankle Boots
-          </a>
-          」
-          <a href="https://sketchfab.com/TunnelVisionStudio" target="_blank" rel="noreferrer">
-            TunnelVisionStudio
-          </a>
-          （
-          <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
-            CC BY 4.0
-          </a>
-          ）。面の数を減らし、色を変えて使っています
+          <div>
+            ブーツの3Dの型：「
+            <a
+              href="https://sketchfab.com/3d-models/photoscanned-female-ankle-boots-81ff219398e348b79497b0ccd98316b9"
+              target="_blank"
+              rel="noreferrer"
+            >
+              Photoscanned Female Ankle Boots
+            </a>
+            」
+          </div>
+          <div>
+            <a href="https://sketchfab.com/TunnelVisionStudio" target="_blank" rel="noreferrer">
+              TunnelVisionStudio
+            </a>
+            （
+            <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noreferrer">
+              CC BY 4.0
+            </a>
+            ）
+          </div>
+          <div>面の数を減らし、色を変えて使っています</div>
         </li>
         <li>
-          服の切り抜きAI：
-          <a href="https://github.com/xuebinqin/U-2-Net" target="_blank" rel="noreferrer">
-            U²-Net
-          </a>
-          （U2-Netp、Apache-2.0）
+          <div>
+            服の切り抜きAI：
+            <a href="https://github.com/xuebinqin/U-2-Net" target="_blank" rel="noreferrer">
+              U²-Net
+            </a>
+            （U2-Netp、Apache-2.0）
+          </div>
         </li>
       </ul>
     </details>

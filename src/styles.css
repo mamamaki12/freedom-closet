@@ -2026,3 +2026,50 @@ p[role="status"]:empty {
 .more.fold[open] .fold-chevron {
   transform: rotate(90deg);
 }
+
+/* --- 服の編集の「詳しく」・設定の「素材のライセンス」も、たたんだ行は灰色の囲みにそろえる。開いた中身とは少しあける --- */
+.more.fold[open] > summary {
+  margin-bottom: 12px;
+}
+/* 素材のライセンス：作品名・作者とライセンス・使い方の行の間を少しあけ、別の行のリンクどうしが上下でくっつかないようにする */
+.credits li > div + div {
+  margin-top: 4px;
+}
+/* 1つの行が折り返したときも、上下のリンクが 8px 以上はなれるよう、行の高さを少し広げる */
+.credits {
+  line-height: 1.8;
+}
+
+/* --- 体感のチップと「現在地」：6つが1行に入らない幅では、3つずつ2行のマス目にして「現在地」だけが次の行に浮かないようにする --- */
+.conditions {
+  container-type: inline-size;
+}
+/* 「現在地」はどの画面でも短い名前にする（長い名前は読み上げとボタンの説明に残る） */
+.feel-chips .weather .btn-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.feel-chips .weather .btn-short {
+  display: inline;
+}
+@container (min-width: 340px) and (max-width: 620px) {
+  .feel-chips {
+    display: grid;
+    grid-template-columns: repeat(3, max-content);
+  }
+  .feel-chips .chip,
+  .feel-chips .weather > .btn {
+    justify-content: center;
+  }
+}
+/* 「CC BY 4.0」のような短い名前は途中で折らない */
+.credits a[href*="creativecommons.org"] {
+  white-space: nowrap;
+}
