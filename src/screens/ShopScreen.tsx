@@ -1,5 +1,5 @@
 // 買い足し提案。買う服の種類・色を決めて、ユニクロ・GUの公式サイトの検索結果へつなぐ。
-import { Check, ChevronDown, Ruler, Search, ShoppingBag, SlidersHorizontal } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Ruler, Search, ShoppingBag, SlidersHorizontal } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ClosetAI } from "../ai";
 import { ColorChips, ColorDot, errorMessage, GarmentChip, GarmentFace } from "../components/common";
@@ -74,10 +74,12 @@ export function ShopScreen({
       <h2>買い足すなら</h2>
       <p className="hint">手持ちの服と合わせやすく、コーデが増える服を選びました。商品はユニクロ・GUの公式サイトで探せます。</p>
 
-      <details className="more">
+      {/* たたんだ行は、コーデの「今：…」と同じ灰色の囲みにそろえる */}
+      <details className="more fold">
         <summary>
           <SlidersHorizontal {...ICON} />
           条件を変える <span className="hint">{conditionSummary}</span>
+          <ChevronRight className="fold-chevron" {...ICON} />
         </summary>
         <div className="more-body">
           <p className="hint">避けたい色</p>
