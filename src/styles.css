@@ -1891,6 +1891,10 @@ p[role="status"]:empty {
   .closet-notice-detail {
     max-width: 100%;
   }
+  /* 2行になるとき「う」だけが次の行に残らないよう、行の長さをそろえる */
+  .closet-notice-title {
+    text-wrap: balance;
+  }
   .closet-notice-detail {
     white-space: nowrap;
   }
@@ -1994,6 +1998,22 @@ p[role="status"]:empty {
   border: 1px solid var(--line);
   border-radius: 10px;
   -webkit-tap-highlight-color: transparent;
+}
+/* 狭い画面で「こだわり」が「こだわ／り」と折れないよう、名前は1行のまま、例の文の方を「…」で切る */
+.fold-label {
+  flex: none;
+  white-space: nowrap;
+}
+.more.fold > summary .hint {
+  min-width: 0;
+}
+/* 「こだわり」の入力と並ぶ「反映」が「反／映」と縦に折れないよう、ボタンは縮めず入力の方を縮める */
+.more-body.row > .text {
+  min-width: 0;
+}
+.more-body.row > .btn {
+  flex: none;
+  white-space: nowrap;
 }
 .more.fold > summary::-webkit-details-marker {
   display: none;

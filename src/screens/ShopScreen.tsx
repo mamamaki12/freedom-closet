@@ -78,7 +78,7 @@ export function ShopScreen({
       <details className="more fold">
         <summary>
           <SlidersHorizontal {...ICON} />
-          条件を変える <span className="hint">{conditionSummary}</span>
+          <span className="fold-label">条件を変える</span> <span className="hint">{conditionSummary}</span>
           <ChevronRight className="fold-chevron" {...ICON} />
         </summary>
         <div className="more-body">

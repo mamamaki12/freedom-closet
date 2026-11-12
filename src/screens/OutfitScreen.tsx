@@ -229,7 +229,7 @@ export function OutfitScreen({
         <details className="more fold">
           <summary>
             <SlidersHorizontal {...ICON} />
-            こだわり <span className="hint">{preference || "例：明るめ、楽な服"}</span>
+            <span className="fold-label">こだわり</span> <span className="hint">{preference || "例：明るめ、楽な服"}</span>
             <ChevronRight className="fold-chevron" {...ICON} />
           </summary>
           <form
