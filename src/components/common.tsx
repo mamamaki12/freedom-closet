@@ -1,7 +1,7 @@
 import { HelpCircle } from "lucide-react";
 import { Fragment, useEffect, useState, type ReactNode } from "react";
 import { COLORS, shortLabel } from "../domain/colors";
-import { nameParts } from "../domain/names";
+import { garmentNameParts, isLongName } from "../domain/names";
 import type { ColorName, Garment } from "../domain/types";
 
 export function usePhotoUrl(photo: Blob | undefined): string | undefined {
@@ -80,7 +80,7 @@ export function GarmentThumb({
       <span className="thumb-label">
         <ColorDot color={garment.color} />
         {garment.subColor && garment.subColor !== garment.color && <ColorDot color={garment.subColor} />}
-        <NameText name={label} />
+        <NameText parts={garmentNameParts(garment)} />
       </span>
       {caption && <span className="thumb-caption">{caption}</span>}
     </Tag>
@@ -88,13 +88,13 @@ export function GarmentThumb({
 }
 
 /**
- * 服の名前。「デニムジャケット」のように分けられる長い名前は、言葉の切れ目（デニム／ジャケット）で2行まで折り返す。
- * 分けられない6文字以上の名前（カーディガン など）は、少し小さい文字で1行に収める。入らなければ「…」
+ * 服の名前。「デニムジャケット」「ボーダーTシャツ」のように分けられる名前は、言葉の切れ目（デニム／ジャケット）で2行まで折り返す。
+ * 1つの切れ目の中が6文字以上（カーディガン など）のときは、少し小さい文字にして切れにくくする。入らなければ「…」
  */
-export function NameText({ name }: { name: string }) {
-  const parts = nameParts(name);
+export function NameText({ parts }: { parts: string[] }) {
+  const cls = `thumb-name${parts.length > 1 ? " split" : ""}${isLongName(parts) ? " long" : ""}`;
   return (
-    <span className={parts.length > 1 ? "thumb-name split" : name.length >= 6 ? "thumb-name long" : "thumb-name"}>
+    <span className={cls}>
       {parts.map((p, i) => (
         <Fragment key={i}>
           {i > 0 && <wbr />}

@@ -860,10 +860,25 @@ legend.with-icon {
 .cond-summary-text {
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
   font-weight: 600;
+  /* 入らないときは「・」の所で2段に折り返す（途中で「…」にしない） */
+  padding: 6px 0;
+  line-height: 1.4;
+}
+.cond-summary-text {
+  display: flex;
+  align-items: baseline;
+}
+.cond-summary-label {
+  flex: none;
+}
+.cond-parts {
+  min-width: 0;
+}
+.cond-part {
+  display: inline-block;
+  white-space: nowrap;
 }
 .cond-summary-label {
   font-weight: normal;
@@ -1920,4 +1935,19 @@ p[role="status"]:empty {
   padding-left: 4px;
   padding-right: 4px;
   gap: 3px;
+}
+
+/* --- 「現在地」のボタンは体感のチップと同じ並びに置く（中の囲みはなくして、ボタンと気温の文をそのまま並べる） --- */
+.cond-chips .weather {
+  display: contents;
+}
+.cond-chips .weather > .btn {
+  border-radius: 999px;
+}
+/* 取ってきた気温の文や、うまく取れなかったときの文は、次の行にまるごと出す */
+.cond-chips .weather > .hint,
+.cond-chips .weather > .error {
+  flex-basis: 100%;
+  grid-column: 1 / -1;
+  margin: 0;
 }

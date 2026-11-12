@@ -125,13 +125,13 @@ export function OutfitScreen({
   const toggle = (id: string) =>
     change(() => setMustInclude((cur) => (cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id].slice(-3))));
 
-  // たたんだ行に出す今の条件（例：肌寒い・普段・おまかせ）
-  const condSummary = [
+  // たたんだ行に出す今の条件（例：肌寒い・普段・おまかせ）。狭い画面では「・」の所で2段に折り返す
+  const condParts = [
     FEELS.find((f) => f.id === feel)?.label,
     PURPOSE_LABELS[purpose].split("・")[0],
     validMustInclude.length ? `服${validMustInclude.length}着` : "おまかせ",
     ...(preference ? ["こだわりあり"] : []),
-  ].join("・");
+  ].filter((x): x is string => !!x);
 
   if (!ready) {
     return (
@@ -163,13 +163,22 @@ export function OutfitScreen({
         <SlidersHorizontal {...ICON} />
         <span className="cond-summary-text">
           <span className="cond-summary-label">今：</span>
-          {condSummary}
+          {/* 2段になったときも「今：」の右にそろえ、「・」は前の言葉の後ろに付けて段の頭に来ないようにする */}
+          <span className="cond-parts">
+            {condParts.map((p, i) => (
+              <span key={i} className="cond-part">
+                {p}
+                {i < condParts.length - 1 && "・"}
+              </span>
+            ))}
+          </span>
         </span>
         {condOpen ? <ChevronDown {...ICON} /> : <ChevronRight {...ICON} />}
       </button>
 
       {/* 体感・目的のチップは折り返して全部見せる（横にずらす1行だと右端で切れて見えなかった） */}
       <div className="conditions" id={condId} hidden={!condOpen}>
+        {/* 「現在地」も体感のチップと同じ並びに入れ、狭い画面の2列のマス目では「暑い」の隣に収める */}
         <div className="chips cond-chips" role="group" aria-label="体感の気温">
           {FEELS.map((f) => (
             <button key={f.id} type="button" className={`chip${feel === f.id ? " on" : ""}`} aria-pressed={feel === f.id} onClick={() => chooseFeel(f.id)}>
@@ -177,8 +186,8 @@ export function OutfitScreen({
               {f.label}
             </button>
           ))}
+          <WeatherButton onTemperature={(c) => chooseFeel(feelForTemperature(c))} />
         </div>
-        <WeatherButton onTemperature={(c) => chooseFeel(feelForTemperature(c))} />
         <div className="chips cond-chips" role="group" aria-label="出かける目的">
           {PURPOSES.map((p) => (
             <button key={p} type="button" className={`chip${purpose === p ? " on" : ""}`} aria-pressed={purpose === p} onClick={() => choosePurpose(p)}>
