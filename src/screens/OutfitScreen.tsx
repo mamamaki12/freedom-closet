@@ -180,7 +180,7 @@ export function OutfitScreen({
       {/* 体感・目的のチップは折り返して全部見せる（横にずらす1行だと右端で切れて見えなかった） */}
       <div className="conditions" id={condId} hidden={!condOpen}>
         {/* 「現在地」も体感のチップと同じ並びに入れ、狭い画面の2列のマス目では「暑い」の隣に収める */}
-        <div className="chips cond-chips" role="group" aria-label="体感の気温">
+        <div className="chips cond-chips feel-chips" role="group" aria-label="体感の気温">
           {FEELS.map((f) => (
             <button key={f.id} type="button" className={`chip${feel === f.id ? " on" : ""}`} aria-pressed={feel === f.id} onClick={() => chooseFeel(f.id)}>
               <Icon of={FEEL_ICONS[f.id]} />
