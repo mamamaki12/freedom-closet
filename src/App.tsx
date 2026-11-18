@@ -135,7 +135,7 @@ export function App() {
   return (
     <div className="app" style={undoLift ? ({ "--undo-lift": `${undoLift}px` } as CSSProperties) : undefined}>
       <header className="top">
-        <h1>freedom closet</h1>
+        <h1>洋服選びからの解放</h1>
         <span className="badge with-icon">
           {ai.id === "claude" ? <Cloud size={14} aria-hidden /> : <Smartphone size={14} aria-hidden />}
           {ai.label}

@@ -126,7 +126,7 @@ export function parseBackup(text: string): RestoredBackup {
     throw new BackupFormatError("バックアップファイルを読み込めませんでした（JSONではありません）");
   }
   const parsed = envelopeSchema.safeParse(json);
-  if (!parsed.success) throw new BackupFormatError("freedom closet のバックアップファイルではないか、壊れています");
+  if (!parsed.success) throw new BackupFormatError("「洋服選びからの解放」のバックアップファイルではないか、壊れています");
   const b = parsed.data;
   const garments = each(b.garments, backupGarmentSchema);
   if (garments.ok.length === 0 && garments.bad > 0) {
