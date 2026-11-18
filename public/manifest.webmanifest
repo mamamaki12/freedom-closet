@@ -1,6 +1,6 @@
 {
-  "name": "freedom closet",
-  "short_name": "closet",
+  "name": "洋服選びからの解放",
+  "short_name": "洋服選び",
   "description": "手持ちの服でコーデを考えるアプリ",
   "lang": "ja",
   "start_url": "./",
