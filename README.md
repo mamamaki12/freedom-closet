@@ -43,6 +43,12 @@ Claude APIモードも試すとき（別のターミナルで）：
 ```bash
 ANTHROPIC_API_KEY=sk-ant-... npm run dev:server   # http://localhost:8787
 ```
+Windows（PowerShell）では書き方が違う：
+```powershell
+$env:ANTHROPIC_API_KEY = "sk-ant-..."; npm run dev:server
+```
+中継サーバーは `.env` を読まない。`.env.example` の「中継サーバー」の欄にある値（`PORT`・`PEXELS_API_KEY` など）も、上と同じように起動するターミナルで指定する。APIキーなしでも起動はするが、Claude を呼ぶところで失敗する。
+
 APIキーは中継サーバーだけが持つ。`VITE_` で始まる変数に入れるとブラウザに埋め込まれるので入れない。
 
 ## 開発
